@@ -36,3 +36,15 @@ export interface MockCaseRecord {
   plannedOutcomeLabel: 'Approved' | 'Flagged' | 'Under Review'
   discrepancyNote?: string
 }
+
+export interface UploadedDocument {
+  file: File
+  previewUrl: string
+  name: string
+  sizeFormatted: string
+  sizeBytes: number
+  mimeType: string
+  detectedFormat: string
+  dimensions?: { width: number; height: number }
+  uploadedAt: string
+}

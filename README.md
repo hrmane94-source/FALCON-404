@@ -1,8 +1,8 @@
 # FALCON — AI-Based Fake Identity & Document Screening System
 
 > **Event:** SEVA FIRST INNOVATION CHALLENGE 2026  
-> **Development Phase:** Phase 1 — Frontend Foundation  
-> **Status:** Prototype Interface Active (Backend & AI Engines Not Integrated)
+> **Development Phase:** Phase 2 — Functional Document Upload  
+> **Status:** Client-Side Upload & Preview Active (Automated AI Analysis Not Integrated)
 
 ---
 
@@ -16,46 +16,45 @@ Manual inspection is slow, subjective, and prone to human error, while tradition
 
 ---
 
-## 2. Phase 1 Scope & Features
+## 2. Implemented Features
 
-This repository represents **Phase 1: Frontend Foundation**. This phase establishes the institutional design identity, visual hierarchy, responsive layout, navigation structure, and verification workflow specifications.
-
-### Implemented Features (Phase 1)
-- **Application Shell & Branding:**
-  - Official FALCON identity with institutional deep navy blue palette, crisp light surfaces, and restrained orange highlights.
-  - Collapsible, responsive sidebar navigation supporting desktop, tablet, and mobile viewport widths.
-  - Top navigation bar featuring breadcrumbs, station indicators (`FLC-LOC-01`), and quick actions.
+### Phase 1: Frontend Foundation
+- **Application Shell & Institutional Identity:**
+  - Modern, uncluttered interface using deep navy blue, white, and restrained orange highlights.
+  - Collapsible, responsive sidebar navigation supporting desktop, tablet, and mobile viewports.
+  - Top navigation bar featuring breadcrumbs, prototype status pill, and operator session tag.
   - Institutional footer with attribution to **SEVA FIRST INNOVATION CHALLENGE 2026**.
 - **System Overview Dashboard:**
-  - Mission briefing and multi-layer defense overview.
-  - Prominent "Initiate Verification" call-to-action.
-  - Interactive **5-Stage Verification Pipeline Visualizer** (Document Capture &rarr; OCR &amp; Validation &rarr; Forensic Analysis &rarr; Face Comparison &rarr; Human Review) with modal inspection of planned algorithmic parameters.
-  - **Honest System Readiness Card** displaying exact operational status for all components.
-  - Recent screening log with illustrative demonstration sample cases and an instant toggle to a baseline clean empty state.
-- **New Verification Terminal (Intake UI):**
-  - Document categorization and issuer selection (Aadhaar, Passport, Driver's License, Voter ID, PAN).
-  - Multi-zone capture staging (Front Face, Reverse Side, Live Subject Selfie).
-  - Configurable screening parameters (Standard Intake vs. Enhanced Forensic).
-  - Explicitly disabled execution triggers with informative modal dialogs preventing false assertions of backend execution.
-- **Case History & Audit Ledger:**
-  - Tabular inspection ledger with real-time text search and multi-parameter filters (Document Type, Disposition Status).
-  - Detailed case dossier inspection modal displaying mock forensic notes and cryptographic reference identifiers.
-  - Interactive "Clear to Empty State" / "Reload Demo Data" demonstration toggle.
+  - Hero introduction with clean typography and single prominent **Start Verification** call-to-action.
+  - Bespoke **CSS-powered document scanning simulation** clearly labeled as a synthetic demo preview.
+  - Interactive **5-Stage Verification Pipeline Visualizer** (`01 Document Capture` → `02 OCR & Validation` → `03 Forensic Analysis` → `04 Face Comparison` → `05 Human Review`) with hover feedback and specification inspection modal.
+  - Compact **System Component Readiness** matrix showing live technical status.
+  - Recent screening log with illustrative demonstration sample cases and a toggle to an empty state.
 - **Institutional Reports & Settings Placeholders:**
-  - Informative placeholders clearly explaining roadmap milestones for Phase 2 (Gateway/DB), Phase 3 (Forensic AI), and Phase 4 (PDF/CSV/SIEM export engine).
-  - Security policy and statutory privacy preview (India DPDP Act zero-permanent-storage architecture).
+  - Informative placeholders detailing roadmap milestones for Phase 3 (Forensic AI) and Phase 4 (PDF/CSV/SIEM export engine).
+
+### Phase 2: Functional Document Upload (Current)
+- **Functional Ingestion Workflow (`New Verification`):**
+  - **Drag-and-Drop Uploader:** In-browser document intake supporting JPEG, PNG, and WebP images up to 10 MB.
+  - **Multi-Layer Validation:** Enforces file-extension checks, MIME-type checks, empty-file detection, and **binary magic-number signatures** (JPEG `FF D8 FF`, PNG `89 50 4E 47`, WebP `RIFF....WEBP`) to reject disguised non-image files.
+  - **Real-Time Document Preview:** Displays image preview, file name, detected format, formatted file size, dimensions, and ingestion timestamp.
+  - **Replace & Remove Actions:** Allows removing or selecting a different document, automatically revoking temporary object URLs (`URL.revokeObjectURL()`) to prevent memory leaks.
+  - **Ingestion Review Step:** Seamless two-step flow (`Upload Document` → `Review Ingestion`) displaying the uploaded document dossier with the transparent status notice:
+    > *"Document uploaded successfully. Automated document analysis is not yet available in this prototype."*
+  - **In-Browser Security & Privacy:** Document processing occurs entirely in local browser memory. Files are never transmitted over the network or saved to persistent storage.
 
 ---
 
 ## 3. Honest System Readiness Indicators
 
-In accordance with Phase 1 project rules, no synthetic test passes or artificial metrics are presented:
+In accordance with competition guidelines, no synthetic test passes or artificial metrics are presented:
 
 | Subsystem Component | Operational Status | Technical Implementation | Scheduled Phase |
 | :--- | :--- | :--- | :--- |
 | **Frontend UI / Shell** | <span style="color:green">Available &amp; Operational</span> | React 19 + TypeScript + Vite + Tailwind CSS | Phase 1 (Complete) |
-| **Backend API Gateway** | <span style="color:red">Not Connected</span> | Standalone frontend sandbox; no network calls | Phase 2 |
-| **OCR &amp; Checksum Engine** | <span style="color:orange">Not Integrated</span> | Algorithmic MRZ &amp; OCR specifications defined | Phase 2 |
+| **Document Ingestion &amp; Preview** | <span style="color:green">Available &amp; Operational</span> | Client-side intake + binary header validation | Phase 2 (Complete) |
+| **Backend API Gateway** | <span style="color:red">Not Connected</span> | Standalone frontend sandbox; no network calls | Phase 3 |
+| **OCR &amp; Checksum Engine** | <span style="color:orange">Not Integrated</span> | Algorithmic MRZ &amp; OCR specifications defined | Phase 3 |
 | **Forensic Analysis Engine** | <span style="color:orange">Not Integrated</span> | ELA &amp; Deep Learning forgery detection defined | Phase 3 |
 | **Facial Biometric Matching** | <span style="color:orange">Not Integrated</span> | 1:1 Cosine &amp; Anti-spoofing pipeline defined | Phase 3 |
 
@@ -115,19 +114,20 @@ npm run preview
 
 ---
 
-## 6. Current Limitations (Phase 1)
+## 6. Current Limitations (Phase 2)
 
 1. **No Backend Services:** No live HTTP endpoints, databases, or Redis task queues are currently active.
-2. **No Real Document Processing:** Document upload inputs do not ingest or process actual image files; execution triggers are intentionally disabled with explanatory modals.
-3. **Mock Data Fixtures:** All cases displayed in the Case History table are illustrative mock samples for UI demonstration purposes.
-4. **No Real Authentication:** The interface displays an institutional operator session tag without a fake login screen, ensuring no false assertions of security.
+2. **In-Browser Processing Only:** Uploaded files are validated and previewed in local browser memory only.
+3. **No Automated Classification:** Documents are not classified as genuine or forged; no OCR text extraction or biometric facial recognition is performed.
+4. **Mock Case History Data:** Cases displayed in the Case History table are illustrative mock samples for UI demonstration purposes.
+5. **No Authentication:** The interface displays an institutional operator session tag without a fake login screen.
 
 ---
 
 ## 7. Development Roadmap
 
-- **Phase 1 (Current):** Frontend foundation, navigation, visual identity, workflow specification.
-- **Phase 2:** Backend API Gateway (FastAPI), document pre-processing, Tesseract/PaddleOCR extraction, and ICAO 9303 checksum verification.
-- **Phase 3:** AI forensic models (Error Level Analysis, copy-move detection, font anomaly screening) and 1:1 facial biometric matching with anti-spoofing.
+- **Phase 1 (Complete):** Frontend foundation, navigation, visual identity, workflow specification.
+- **Phase 2 (Current):** Functional document upload, client-side validation (magic bytes, size, format), document preview, and review step.
+- **Phase 3:** Backend API Gateway (FastAPI), document pre-processing, OCR extraction, and computer vision forensic analysis.
 - **Phase 4:** Human-in-the-loop adjudication terminal, PDF audit dossier export, and regulatory logging.
 - **Phase 5:** Production hardening, end-to-end performance benchmarks, and automated Vercel/cloud deployment.

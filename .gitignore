@@ -28,3 +28,10 @@ dist-ssr
 !.env.example
 .tmp
 .gemini
+
+# Python & ML Data
+ml_data/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class

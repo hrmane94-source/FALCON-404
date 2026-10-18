@@ -7,7 +7,7 @@ export interface PipelineStage {
   subtitle: string
   description: string
   iconName: 'Camera' | 'FileSearch' | 'ShieldAlert' | 'UserCheck' | 'ClipboardCheck'
-  status: 'planned'
+  status: 'implemented' | 'planned' | 'in-progress'
   details: string[]
 }
 

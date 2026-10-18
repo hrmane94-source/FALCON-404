@@ -115,7 +115,7 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
     setOcrStatus('initializing')
     setOcrError(null)
     setOcrProgress({
-      status: 'Initializing OCR WebAssembly engine...',
+      status: 'INITIALIZING OCR WASM ENGINE...',
       progress: 0,
       stage: 'initializing'
     })
@@ -124,9 +124,9 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
       const result = await performOCR({
         imageSource: uploadedDoc.file,
         documentCategory: selectedDocType,
-        onProgress: (prog) => {
-          setOcrProgress(prog)
-          if (prog.stage === 'recognizing') {
+        onProgress: (progress: OCRProgress) => {
+          setOcrProgress(progress)
+          if (progress.stage === 'recognizing') {
             setOcrStatus('recognizing')
           }
         }
@@ -134,38 +134,24 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
 
       setOcrResult(result)
       setOcrStatus('success')
-
-      // If Stage 04 layout analysis was already executed prior to OCR, refresh spatial containment
-      if (layoutResult && uploadedDoc?.previewUrl) {
-        performDocumentLayoutAnalysis({
-          file: uploadedDoc.file,
-          previewUrl: uploadedDoc.previewUrl,
-          textRegions: result.textRegions
-        })
-          .then((newLayout) => {
-            setLayoutResult(newLayout)
-          })
-          .catch((e) => console.warn('Could not auto-refresh layout containment:', e))
-      }
-
       return result
     } catch (err: any) {
       setOcrStatus('error')
       setOcrError(
         err?.message ||
-          'Failed to execute Optical Character Recognition. Please check network connectivity and try again.'
+          'Failed to complete OCR processing. Please check image quality and try again.'
       )
       return null
     }
   }
 
-  const handleRunIntegrity = async () => {
-    if (!uploadedDoc?.file || !uploadedDoc.previewUrl) return
+  const handleRunIntegrity = async (): Promise<ImageIntegrityResult | null> => {
+    if (!uploadedDoc?.file) return null
 
     setIntegrityStatus('analyzing')
     setIntegrityError(null)
     setIntegrityProgress({
-      status: 'Reading container headers...',
+      status: 'DECODING RASTER MATRIX & COMPUTING LAPLACIAN EDGES...',
       progress: 0.1,
       stage: 'reading'
     })
@@ -174,29 +160,31 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
       const result = await performImageIntegrityAnalysis({
         file: uploadedDoc.file,
         previewUrl: uploadedDoc.previewUrl,
-        onProgress: (prog) => {
+        onProgress: (prog: IntegrityProgress) => {
           setIntegrityProgress(prog)
         }
       })
 
       setIntegrityResult(result)
       setIntegrityStatus('success')
+      return result
     } catch (err: any) {
       setIntegrityStatus('error')
       setIntegrityError(
         err?.message || 'Failed to complete image integrity analysis. Please try another image.'
       )
+      return null
     }
   }
 
-  const handleRunLayout = async (passedOcr?: OCRResult | null) => {
-    if (!uploadedDoc?.file || !uploadedDoc.previewUrl) return null
+  const handleRunLayout = async (passedOcr?: OCRResult | null): Promise<DocumentLayoutResult | null> => {
+    if (!uploadedDoc?.file) return null
 
     setLayoutStatus('analyzing')
     setLayoutError(null)
     setLayoutProgress({
-      status: 'Analyzing document perimeter and corners...',
-      progress: 0.1,
+      status: 'CONVOLVING SOBEL MATRIX & ESTIMATING QUADRILATERAL...',
+      progress: 0.15,
       stage: 'decoding'
     })
 
@@ -238,88 +226,93 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
   const isLayoutRunning = layoutStatus === 'analyzing'
   const isProcessing = isOcrRunning || isIntegrityRunning || isLayoutRunning
 
-  const documentOptions: { type: DocumentType; label: string; description: string }[] = [
+  const documentOptions: { type: DocumentType; label: string; description: string; code: string }[] = [
     {
       type: 'National ID',
+      code: 'STD // NID',
       label: 'National ID / Aadhaar',
-      description: 'Standard national identity card with text and QR code format.'
+      description: 'Standard national identity card with text and QR format.'
     },
     {
       type: 'Passport',
+      code: 'STD // PPT',
       label: 'Passport',
       description: 'Standard travel document with photo page and MRZ lines.'
     },
     {
       type: "Driver's License",
+      code: 'STD // DLN',
       label: "Driver's License",
-      description: 'Motor vehicle operating license with issuing authority format.'
+      description: 'Motor vehicle operating credential format.'
     },
     {
       type: 'Voter ID',
+      code: 'STD // VID',
       label: 'Voter ID',
       description: 'Electoral photo identity credential.'
     },
     {
       type: 'PAN Card',
+      code: 'STD // PAN',
       label: 'PAN Card',
-      description: 'Permanent Account Number identification card.'
+      description: 'Tax identification account card format.'
     }
   ]
 
   const getStep2BannerContent = () => {
     if (isProcessing) {
       return {
-        icon: <Loader2 className="w-4.5 h-4.5 animate-spin text-blue-600" />,
-        iconBg: 'bg-blue-50 border-blue-200',
+        icon: <Loader2 className="w-5 h-5 animate-spin text-orange-500" />,
+        iconBg: 'bg-orange-500/10 border-orange-500/30',
         title: isOcrRunning
-          ? 'Running Stage 02: Optical Character Recognition (OCR)...'
+          ? 'STAGE 02 IN PROGRESS // OPTICAL CHARACTER RECOGNITION (OCR)'
           : isIntegrityRunning
-          ? 'Running Stage 03: Image Integrity & Forensics...'
-          : 'Running Stage 04: Document Boundary & Layout Analysis...',
+          ? 'STAGE 03 IN PROGRESS // IMAGE INTEGRITY & ERROR LEVEL ANALYSIS'
+          : 'STAGE 04 IN PROGRESS // SOBEL BOUNDARY & LAYOUT ANALYSIS',
         subtitle:
-          'Client-side algorithms are actively analyzing document glyphs, raster integrity, and boundary geometry. Please wait.'
+          'Client-side algorithms are actively analyzing document glyphs, raster integrity, and boundary geometry in-memory.'
       }
     }
     if (integrityResult && ocrResult && layoutResult) {
       return {
-        icon: <FileCheck2 className="w-4.5 h-4.5 text-emerald-600" />,
-        iconBg: 'bg-emerald-50 border-emerald-200',
-        title: 'Complete Document Screening Finalized',
+        icon: <FileCheck2 className="w-5 h-5 text-emerald-500" />,
+        iconBg: 'bg-emerald-500/10 border-emerald-500/30',
+        title: 'COMPLETE SCREENING FINALIZED // DOSSIER READY',
         subtitle:
-          'Client-side OCR transcription, image integrity checks, and document boundary/perspective analysis are complete. Review findings and download the dossier below.'
+          'Client-side OCR transcription, image integrity checks, and document boundary/perspective analysis are complete. Review audit findings below.'
       }
     }
     if (integrityResult && ocrResult) {
       return {
-        icon: <FileCheck2 className="w-4.5 h-4.5 text-emerald-600" />,
-        iconBg: 'bg-emerald-50 border-emerald-200',
-        title: 'OCR & Integrity Complete • Ready for Boundary Analysis',
+        icon: <FileCheck2 className="w-5 h-5 text-emerald-500" />,
+        iconBg: 'bg-emerald-500/10 border-emerald-500/30',
+        title: 'OCR & INTEGRITY COMPLETE // READY FOR BOUNDARY LOCATOR',
         subtitle:
           'Client-side OCR transcription and image integrity checks are complete. Run Stage 04 below to evaluate boundary localization, perspective, and layout containment.'
       }
     }
     if (ocrStatus === 'success') {
       return {
-        icon: <Sparkles className="w-4.5 h-4.5 text-purple-600" />,
-        iconBg: 'bg-purple-50 border-purple-200',
-        title: 'OCR Complete • Stages 03 & 04 Ready',
+        icon: <Sparkles className="w-5 h-5 text-purple-500" />,
+        iconBg: 'bg-purple-500/10 border-purple-500/30',
+        title: 'OCR COMPLETE // STAGES 03 & 04 READY FOR INVOCATION',
         subtitle:
-          'Document characters have been extracted. Click "Run Full Screening" below to evaluate raster integrity, metadata, ELA, and document boundaries.'
+          'Document characters have been extracted. Click "RUN COMPLETE SCREENING PASS" to evaluate raster integrity, metadata, ELA, and document boundaries.'
       }
     }
     if (ocrStatus === 'error' || integrityStatus === 'error' || layoutStatus === 'error') {
       return {
-        icon: <AlertTriangle className="w-4.5 h-4.5 text-rose-600" />,
-        iconBg: 'bg-rose-50 border-rose-200',
-        title: 'Document Ingestion Flagged an Engine Error',
+        icon: <AlertTriangle className="w-5 h-5 text-rose-500" />,
+        iconBg: 'bg-rose-500/10 border-rose-500/30',
+        title: 'ENGINE EXECUTION FAULT DETECTED',
         subtitle:
           'One of the client-side screening pipelines encountered an error. You may retry below or upload a different image.'
       }
     }
     return {
-      icon: <FileCheck2 className="w-4.5 h-4.5 text-blue-600" />,
-      iconBg: 'bg-blue-50 border-blue-200',
-      title: 'Document Uploaded Successfully • Ready for Screening',
+      icon: <FileCheck2 className="w-5 h-5 text-orange-500" />,
+      iconBg: 'bg-orange-500/10 border-orange-500/30',
+      title: 'SPECIMEN INGESTED // READY FOR MULTI-STAGE SCREENING',
       subtitle:
         'Your document file is validated in-memory. You can execute individual OCR, Integrity, and Boundary checks below or run a complete screening pass.'
     }
@@ -328,57 +321,45 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
   const bannerContent = getStep2BannerContent()
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 max-w-5xl mx-auto">
       {/* Step Indicator Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200/80">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/90 dark:border-slate-800">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-              New Verification
+            <h2 className="font-heading text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight uppercase">
+              INTAKE &amp; SCREENING WORKSPACE
             </h2>
-            <Badge variant="info" size="sm">
-              Phase 5: Document Boundary &amp; Layout
+            <Badge variant="neutral" size="sm">
+              SEC // 02
             </Badge>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Functional document intake, client-side OCR, image integrity analysis, boundary localization, and screening dossier.
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-sans">
+            Client-side specimen intake, OCR glyph extraction, forensic integrity checks, boundary geometry, and screening dossier.
           </p>
         </div>
 
         {/* Stepper tracker */}
-        <div className="flex items-center gap-2 self-start sm:self-auto text-xs font-medium">
+        <div className="flex items-center gap-2 self-start sm:self-auto font-mono text-xs">
           <div
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-full transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded transition-colors ${
               currentStep === 'upload'
-                ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                : 'bg-slate-100 text-slate-600'
+                ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 font-bold'
+                : 'bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-800'
             }`}
           >
-            <span className="w-4 h-4 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px]">
-              1
-            </span>
-            <span>Upload Document</span>
+            <span>01 // INTAKE</span>
           </div>
 
-          <span className="text-slate-300">→</span>
+          <span className="text-slate-300 dark:text-slate-700">→</span>
 
           <div
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-full transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded transition-colors ${
               currentStep === 'review'
-                ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                : 'bg-slate-100 text-slate-500'
+                ? 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/30 font-bold'
+                : 'bg-slate-100 dark:bg-slate-900 text-slate-400 dark:text-slate-600 border border-slate-200 dark:border-slate-800'
             }`}
           >
-            <span
-              className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${
-                currentStep === 'review'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-300 text-slate-600'
-              }`}
-            >
-              2
-            </span>
-            <span>Screening &amp; Review</span>
+            <span>02 // SCREENING &amp; DOSSIER</span>
           </div>
         </div>
       </div>
@@ -388,10 +369,11 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Step 1A: Document Category Selection */}
           <Card
-            title="1. Select Document Category"
-            subtitle="Choose the institutional credential standard for screening."
+            sectionCode="INTAKE // 01"
+            title="Credential Standard Selection"
+            subtitle="Choose the institutional credential standard for automated screening rules."
           >
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 font-mono">
               {documentOptions.map((item) => {
                 const isSelected = selectedDocType === item.type
                 return (
@@ -399,23 +381,26 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
                     key={item.type}
                     type="button"
                     onClick={() => setSelectedDocType(item.type)}
-                    className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    className={`p-3.5 rounded-lg border text-left transition-all cursor-pointer ${
                       isSelected
-                        ? 'border-blue-600 bg-blue-50/60 ring-1 ring-blue-600/30'
-                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                        ? 'border-orange-500 bg-orange-500/10 ring-1 ring-orange-500'
+                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-950'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-semibold text-slate-900">
-                        {item.label}
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        {item.code}
                       </span>
                       {isSelected && (
-                        <div className="w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center text-white">
+                        <div className="w-3.5 h-3.5 rounded-full bg-orange-500 text-white flex items-center justify-center">
                           <Check className="w-2.5 h-2.5 stroke-[3]" />
                         </div>
                       )}
                     </div>
-                    <p className="text-[11px] text-slate-500 leading-snug">
+                    <div className="font-heading text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-tight">
+                      {item.label}
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug font-sans">
                       {item.description}
                     </p>
                   </button>
@@ -426,50 +411,51 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
 
           {/* Step 1B: Document Upload Component */}
           <Card
-            title="2. Document File Intake"
-            subtitle="Upload document image for client-side staging and validation."
+            sectionCode="INTAKE // 02"
+            title="Specimen File Ingestion"
+            subtitle="Upload document image for in-browser client staging and validation."
           >
             <DocumentUploader
               document={uploadedDoc}
               onDocumentSelected={handleDocumentSelected}
               onDocumentRemoved={handleDocumentRemoved}
-              label="Upload Credential Image"
-              description="Drop document capture or click to browse"
+              label="Credential Image Ingestion"
+              description="Drop document capture or click to browse workstation storage"
             />
 
             {/* Navigation / Next Action Button */}
-            <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono">
               <button
                 type="button"
                 onClick={() => onNavigate('overview')}
-                className="text-xs text-slate-500 hover:text-slate-800 font-medium transition-colors cursor-pointer text-left sm:text-auto"
+                className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 font-bold uppercase tracking-wider transition-colors cursor-pointer text-left sm:text-auto"
               >
-                ← Return to Overview
+                ← RETURN TO OVERVIEW
               </button>
 
               <button
                 type="button"
                 disabled={!uploadedDoc}
                 onClick={() => setCurrentStep('review')}
-                className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                className={`inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer ${
                   uploadedDoc
-                    ? 'bg-orange-600 hover:bg-orange-700 text-white shadow-xs'
-                    : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    ? 'bg-orange-600 hover:bg-orange-700 text-white shadow-md shadow-orange-600/20'
+                    : 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed'
                 }`}
               >
-                <span>Continue to Screening &amp; Review</span>
+                <span>PROCEED TO SCREENING PIPELINE</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </Card>
 
           {/* Privacy & Protocol Notice */}
-          <div className="p-4 rounded-xl bg-white border border-slate-200/80 text-xs text-slate-600 space-y-1.5">
-            <div className="flex items-center gap-2 text-slate-900 font-semibold">
-              <Lock className="w-3.5 h-3.5 text-slate-500" />
-              <span>In-Browser Client Ingestion Protocol</span>
+          <div className="p-4 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-400 space-y-1.5 font-mono">
+            <div className="flex items-center gap-2 text-slate-900 dark:text-slate-100 font-bold uppercase tracking-wider">
+              <Lock className="w-3.5 h-3.5 text-orange-500" />
+              <span>IN-BROWSER CLIENT INGESTION PROTOCOL</span>
             </div>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed font-sans">
               Files uploaded here are validated entirely within your local browser runtime. Images are never transmitted to external APIs or recorded to persistent storage. Please use synthetic or mock credentials for demonstration.
             </p>
           </div>
@@ -480,34 +466,35 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
       {currentStep === 'review' && uploadedDoc && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Review Status Banner */}
-          <div className="p-5 rounded-2xl bg-white border border-slate-200/90 shadow-xs space-y-3">
+          <div className="p-5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xs space-y-3 font-mono">
             <div className="flex items-start gap-3">
               <div
-                className={`w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 mt-0.5 ${bannerContent.iconBg}`}
+                className={`w-9 h-9 rounded border flex items-center justify-center flex-shrink-0 mt-0.5 ${bannerContent.iconBg}`}
               >
                 {bannerContent.icon}
               </div>
               <div className="space-y-1">
-                <h3 className="text-base font-semibold text-slate-900">
+                <h3 className="font-heading text-sm font-bold text-slate-900 dark:text-slate-100 tracking-tight uppercase">
                   {bannerContent.title}
                 </h3>
-                <p className="text-xs text-slate-600 leading-relaxed">
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-sans">
                   {bannerContent.subtitle}
                 </p>
               </div>
             </div>
 
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/70 text-[11px] text-slate-600 flex items-start gap-2">
-              <ShieldAlert className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-              <p>
-                <strong>Evaluation Transparency:</strong> FALCON performs client-side OCR character transcription and image integrity checks. It does not certify documents as authentic, nor does it definitively establish fraud. No official government registry lookup or live 1:1 face matching has been executed.
+            <div className="p-3 bg-slate-50 dark:bg-slate-950/60 rounded border border-slate-200/70 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 flex items-start gap-2">
+              <ShieldAlert className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
+              <p className="font-sans leading-relaxed">
+                <strong>Evaluation Transparency:</strong> FALCON performs client-side OCR character transcription, image integrity, and geometric boundary checks. It does not certify documents as authentic, nor does it definitively establish fraud.
               </p>
             </div>
           </div>
 
           {/* Document Ingestion Summary */}
           <Card
-            title="Ingestion Dossier"
+            sectionCode="DOSSIER // 01"
+            title="Specimen Ingestion Record"
             subtitle="Metadata recorded during client-side intake."
             action={
               <button
@@ -519,24 +506,24 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
                     setCurrentStep('upload')
                   }
                 }}
-                className={`text-xs font-medium cursor-pointer ${
+                className={`text-xs font-mono font-bold uppercase tracking-wider cursor-pointer ${
                   isProcessing
-                    ? 'text-slate-400 cursor-not-allowed'
-                    : 'text-blue-600 hover:text-blue-800'
+                    ? 'text-slate-400 dark:text-slate-600 cursor-not-allowed'
+                    : 'text-orange-600 hover:text-orange-700 dark:text-orange-400'
                 }`}
               >
-                Replace or Modify File
+                [REPLACE_SPECIMEN]
               </button>
             }
           >
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-6 items-start">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-6 items-start font-mono">
               {/* Image Preview with Boundary Overlay */}
-              <div className="sm:col-span-5 bg-slate-100 rounded-xl p-3 border border-slate-200/80 flex flex-col items-center justify-center">
-                <div className="relative max-h-64 w-full flex items-center justify-center rounded-lg overflow-hidden border border-slate-200/70 bg-slate-900/5">
+              <div className="sm:col-span-5 bg-slate-950 rounded-lg p-2.5 border border-slate-800 flex flex-col items-center justify-center">
+                <div className="relative max-h-64 w-full flex items-center justify-center rounded overflow-hidden bg-black/40">
                   <img
                     src={uploadedDoc.previewUrl}
                     alt={uploadedDoc.name}
-                    className="max-h-64 w-auto object-contain rounded-lg shadow-2xs"
+                    className="max-h-64 w-auto object-contain rounded"
                   />
                   {layoutResult && (
                     <DocumentBoundaryOverlay
@@ -547,9 +534,9 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
                   )}
                 </div>
                 <div className="flex items-center justify-between w-full mt-2 text-[10px] text-slate-400 font-mono">
-                  <span>Raster Preview</span>
+                  <span>CANVAS // PREVIEW</span>
                   {layoutResult && (
-                    <span className="text-blue-600 font-medium">Overlay: {layoutResult.statusLabel}</span>
+                    <span className="text-orange-400 font-bold uppercase">{layoutResult.statusLabel}</span>
                   )}
                 </div>
               </div>
@@ -557,65 +544,65 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
               {/* Data Breakdown */}
               <div className="sm:col-span-7 space-y-3 text-xs">
                 <div className="grid grid-cols-2 gap-2.5">
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/60">
-                    <span className="text-[10px] uppercase font-mono text-slate-400 block mb-0.5">
-                      Document Standard
+                  <div className="p-3 bg-slate-50 dark:bg-slate-950/60 rounded border border-slate-200/60 dark:border-slate-800">
+                    <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-0.5">
+                      STANDARD
                     </span>
-                    <span className="font-semibold text-slate-900">{selectedDocType}</span>
+                    <span className="font-bold text-slate-900 dark:text-slate-100">{selectedDocType}</span>
                   </div>
 
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/60">
-                    <span className="text-[10px] uppercase font-mono text-slate-400 block mb-0.5">
-                      Ingestion Status
+                  <div className="p-3 bg-slate-50 dark:bg-slate-950/60 rounded border border-slate-200/60 dark:border-slate-800">
+                    <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-0.5">
+                      INGESTION STATUS
                     </span>
-                    <span className="font-medium text-emerald-700">Validated In-Memory</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400 uppercase">VALIDATED IN-MEMORY</span>
                   </div>
 
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/60">
-                    <span className="text-[10px] uppercase font-mono text-slate-400 block mb-0.5">
-                      File Name
+                  <div className="p-3 bg-slate-50 dark:bg-slate-950/60 rounded border border-slate-200/60 dark:border-slate-800">
+                    <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-0.5">
+                      FILE IDENTIFIER
                     </span>
-                    <span className="font-medium text-slate-800 truncate block">
+                    <span className="font-bold text-slate-800 dark:text-slate-200 truncate block">
                       {uploadedDoc.name}
                     </span>
                   </div>
 
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/60">
-                    <span className="text-[10px] uppercase font-mono text-slate-400 block mb-0.5">
-                      File Size
+                  <div className="p-3 bg-slate-50 dark:bg-slate-950/60 rounded border border-slate-200/60 dark:border-slate-800">
+                    <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-0.5">
+                      STORAGE SIZE
                     </span>
-                    <span className="font-mono text-slate-700">{uploadedDoc.sizeFormatted}</span>
+                    <span className="font-bold text-slate-700 dark:text-slate-300">{uploadedDoc.sizeFormatted}</span>
                   </div>
 
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/60">
-                    <span className="text-[10px] uppercase font-mono text-slate-400 block mb-0.5">
-                      Format &amp; MIME
+                  <div className="p-3 bg-slate-50 dark:bg-slate-950/60 rounded border border-slate-200/60 dark:border-slate-800">
+                    <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-0.5">
+                      CODEC &amp; MIME
                     </span>
-                    <span className="text-slate-800">
-                      {uploadedDoc.detectedFormat} ({uploadedDoc.mimeType})
+                    <span className="font-bold text-slate-800 dark:text-slate-200">
+                      {uploadedDoc.detectedFormat}
                     </span>
                   </div>
 
                   {uploadedDoc.dimensions && (
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/60">
-                      <span className="text-[10px] uppercase font-mono text-slate-400 block mb-0.5">
-                        Pixel Resolution
+                    <div className="p-3 bg-slate-50 dark:bg-slate-950/60 rounded border border-slate-200/60 dark:border-slate-800">
+                      <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-0.5">
+                        RESOLUTION MATRIX
                       </span>
-                      <span className="font-mono text-slate-800">
-                        {uploadedDoc.dimensions.width} × {uploadedDoc.dimensions.height}
+                      <span className="font-bold text-slate-800 dark:text-slate-200">
+                        {uploadedDoc.dimensions.width} × {uploadedDoc.dimensions.height} PX
                       </span>
                     </div>
                   )}
                 </div>
 
-                {/* Primary Complete Screening Trigger Button */}
-                <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-blue-50/50 rounded-xl border border-blue-200/60">
+                {/* Master Screening Control Bar */}
+                <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-orange-500/10 rounded-lg border border-orange-500/30">
                   <div>
-                    <span className="text-xs font-semibold text-blue-950 block">
-                      Automated Preliminary Screening
+                    <span className="text-xs font-bold uppercase tracking-wider text-orange-950 dark:text-orange-200 block font-mono">
+                      AUTONOMOUS MULTI-STAGE SCREENING BUS
                     </span>
-                    <span className="text-[11px] text-blue-700">
-                      Execute OCR and Image Integrity Analysis in one pass.
+                    <span className="text-[11px] text-orange-800 dark:text-orange-300 font-sans">
+                      Execute OCR (Stage 02), Image Forensics (Stage 03), and Boundary Quad Locator (Stage 04) in one deterministic sequence.
                     </span>
                   </div>
 
@@ -623,21 +610,21 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
                     type="button"
                     disabled={isProcessing}
                     onClick={handleRunCompleteScreening}
-                    className={`inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold shadow-xs transition-all cursor-pointer ${
+                    className={`inline-flex items-center justify-center gap-1.5 px-5 py-2.5 rounded text-xs font-mono font-bold uppercase tracking-wider shadow-md transition-all cursor-pointer flex-shrink-0 ${
                       isProcessing
-                        ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                        : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20'
+                        ? 'bg-slate-300 dark:bg-slate-800 text-slate-500 dark:text-slate-600 cursor-not-allowed'
+                        : 'bg-orange-600 hover:bg-orange-700 text-white shadow-orange-600/30'
                     }`}
                   >
                     {isProcessing ? (
                       <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Screening Active...</span>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>SCREENING ACTIVE...</span>
                       </>
                     ) : (
                       <>
-                        <ShieldCheck className="w-3.5 h-3.5" />
-                        <span>Run Full Screening</span>
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>RUN COMPLETE SCREENING PASS</span>
                       </>
                     )}
                   </button>
@@ -646,7 +633,7 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
             </div>
           </Card>
 
-          {/* STAGE 02: Genuine Client-Side OCR Analysis Section */}
+          {/* STAGE 02: Client-Side OCR Analysis Section */}
           <OCRAnalysisSection
             ocrStatus={ocrStatus}
             ocrProgress={ocrProgress}
@@ -679,7 +666,7 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
             onRetryAnalysis={() => handleRunLayout()}
           />
 
-          {/* PRELIMINARY SCREENING REPORT (Appears when integrity analysis has executed) */}
+          {/* PRELIMINARY SCREENING REPORT DOSSIER */}
           {integrityResult && (
             <ScreeningReportSection
               documentName={uploadedDoc.name}
@@ -693,7 +680,7 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
           )}
 
           {/* Bottom Navigation & Action Bar */}
-          <div className="pt-2 border-t border-slate-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="pt-2 border-t border-slate-200/90 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono">
             <button
               type="button"
               disabled={isProcessing}
@@ -703,14 +690,14 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
                   setCurrentStep('upload')
                 }
               }}
-              className={`inline-flex items-center gap-1.5 text-xs font-medium cursor-pointer ${
+              className={`inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider cursor-pointer ${
                 isProcessing
-                  ? 'text-slate-400 cursor-not-allowed'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'text-slate-400 dark:text-slate-600 cursor-not-allowed'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
               }`}
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Return to Upload Step</span>
+              <span>RETURN TO INTAKE</span>
             </button>
 
             <div className="flex items-center gap-2">
@@ -718,37 +705,37 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
                 type="button"
                 disabled={isProcessing}
                 onClick={handleReset}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
+                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer ${
                   isProcessing
-                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed'
+                    : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200'
                 }`}
               >
-                <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-                <span>Upload Another Document</span>
+                <RotateCcw className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                <span>UPLOAD NEW SPECIMEN</span>
               </button>
 
               <button
                 type="button"
                 disabled={isProcessing}
                 onClick={() => onNavigate('overview')}
-                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
+                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer ${
                   isProcessing
-                    ? 'bg-slate-400 text-slate-200 cursor-not-allowed'
-                    : 'bg-slate-900 hover:bg-slate-800 text-white'
+                    ? 'bg-slate-400 dark:bg-slate-700 text-slate-200 dark:text-slate-500 cursor-not-allowed'
+                    : 'bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white'
                 }`}
               >
-                <span>Go to Overview</span>
+                <span>OVERVIEW CONSOLE</span>
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Secondary Information & Developer Attribution Footer */}
-      <div className="pt-4 border-t border-slate-200/60 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-400">
-        <span>{PROJECT_BRANDING.developerFullAttribution}</span>
-        <span className="text-[11px]">{PROJECT_BRANDING.challengeName}</span>
+      {/* Developer Attribution Footer */}
+      <div className="pt-4 border-t border-slate-200/60 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs font-mono text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+        <span>CREATOR // {PROJECT_BRANDING.developerAttribution}</span>
+        <span className="text-[10px]">{PROJECT_BRANDING.challengeName} // GEN 2</span>
       </div>
     </div>
   )

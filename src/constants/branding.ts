@@ -6,12 +6,13 @@
 export const PROJECT_BRANDING = {
   projectName: 'FALCON-404',
   projectShortName: 'FALCON',
-  projectFullName: 'FALCON-404 Institutional Identity Screening Terminal',
+  projectFullName: 'FALCON-404 // Forensic Document Screening System',
+  systemConcept: 'FALCON // FORENSIC INTELLIGENCE',
   developerName: 'Harshad Mane',
   developerAttribution: 'Developed by Harshad Mane',
   developerFullAttribution: 'Developed by Harshad Mane · FALCON-404',
   projectDeveloperCredit: 'FALCON-404 · Developed by Harshad Mane',
   challengeName: 'Seva First Innovation Challenge 2026',
-  systemTagline: 'AI-Based Fake Identity & Document Screening System',
-  version: 'FALCON-404 v0.5'
+  systemTagline: 'Preliminary Document Screening & Forensic Intelligence Terminal',
+  version: 'FALCON-404 Gen 2'
 } as const

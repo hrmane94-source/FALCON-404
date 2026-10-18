@@ -18,7 +18,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col antialiased text-slate-800">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col antialiased text-slate-800 dark:text-slate-200 transition-colors duration-150">
       {/* Sidebar */}
       <Sidebar
         currentSection={currentSection}
@@ -28,7 +28,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
       />
 
       {/* Main Content Area */}
-      <div className="lg:pl-64 flex flex-col flex-1 min-w-0 transition-all">
+      <div className="lg:pl-72 flex flex-col flex-1 min-w-0 transition-all">
         <TopNav
           currentSection={currentSection}
           onNavigate={onNavigate}

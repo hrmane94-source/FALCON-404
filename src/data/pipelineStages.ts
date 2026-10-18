@@ -4,76 +4,76 @@ export const PIPELINE_STAGES: PipelineStage[] = [
   {
     id: 'stage-1',
     stepNumber: '01',
-    name: 'Document Capture',
-    subtitle: 'Image Intake & Pre-processing',
-    description: 'Document ingestion via file upload or camera capture, image orientation adjustment, and resolution checks.',
+    name: 'Specimen Intake',
+    subtitle: 'Validation & Ingestion',
+    description: 'In-memory client ingestion, file signature validation, format detection (JPEG, PNG, WebP), and raster dimensional checks.',
     iconName: 'Camera',
-    status: 'planned',
+    status: 'implemented',
     details: [
-      'Automatic edge detection and perspective correction',
-      'Image sharpness and minimum resolution validation',
-      'Support for standard document image formats (JPEG, PNG)',
-      'Dual-side capture staging for front and back surfaces'
+      'Client-side file magic byte signature validation',
+      'Format-aware intake supporting JPEG, PNG, and WebP',
+      'Pixel resolution check and in-memory Object URL creation',
+      'Zero remote network transmission of document pixels'
     ]
   },
   {
     id: 'stage-2',
     stepNumber: '02',
-    name: 'OCR & Validation',
-    subtitle: 'Text Extraction & Field Checks',
-    description: 'Extracting credential text fields, checking Machine Readable Zones (MRZ), and validating format checksums.',
+    name: 'OCR Glyph Parser',
+    subtitle: 'Text Extraction & Parsing',
+    description: 'Client-side WebAssembly optical recognition via Tesseract.js v7, character transcription, candidate field regex parsing, and quality scoring.',
     iconName: 'FileSearch',
-    status: 'planned',
+    status: 'implemented',
     details: [
-      'Multi-field Optical Character Recognition (OCR)',
-      'Standard ICAO 9303 MRZ parsing and checksum verification',
-      'Format and regex validation for national IDs and passports',
-      'Cross-validation between textual fields and machine-readable data'
+      'In-browser WebAssembly worker thread execution',
+      'Candidate identifier, candidate name, date of birth extraction',
+      'Tesseract glyph transcription clarity score (0-100%)',
+      'Raw OCR output stream viewing and copying'
     ]
   },
   {
     id: 'stage-3',
     stepNumber: '03',
-    name: 'Forensic Analysis',
-    subtitle: 'Tamper & Inconsistency Detection',
-    description: 'Examining document images for signs of digital alteration, font inconsistencies, and copy-paste modifications.',
+    name: 'Forensics & ELA',
+    subtitle: 'Raster & Compression Audit',
+    description: 'Physical raster quality metrics, EXIF/JFIF metadata container inspection, and JPEG canvas Error Level Analysis (ELA).',
     iconName: 'ShieldAlert',
-    status: 'planned',
+    status: 'implemented',
     details: [
-      'Error Level Analysis (ELA) to identify compression anomalies',
-      'Font and alignment anomaly screening across textual fields',
-      'Detection of localized editing and spliced image regions',
-      'Visual discrepancy highlighting for examiner review'
+      'Luminance exposure, RMS contrast, and Laplacian blur metrics',
+      'Binary metadata container inspection (EXIF tags, software markers)',
+      '12× canvas Error Level Analysis for JPEG compression variance',
+      'Format-aware handling (WebP/PNG safely excluded from ELA)'
     ]
   },
   {
     id: 'stage-4',
     stepNumber: '04',
-    name: 'Face Comparison',
-    subtitle: 'Biometric Photo Comparison',
-    description: 'Comparing the photo extracted from the credential against a live reference photo or selfie to confirm subject identity.',
+    name: 'Boundary & Layout',
+    subtitle: 'Quad Locator & Geometry',
+    description: 'Sobel gradient edge detection, 4-corner coordinate localization, perspective keystone ratios, framing compliance, and text containment.',
     iconName: 'UserCheck',
-    status: 'planned',
+    status: 'implemented',
     details: [
-      'Facial detection and portrait normalization',
-      'Feature comparison between credential photo and live image',
-      'Basic presentation check to discourage replay attempts',
-      'Similarity scoring to support decision thresholds'
+      'Sobel gradient matrix convolution for edge detection',
+      'Quadrilateral corner localization (TL, TR, BR, BL)',
+      'In-plane rotation angle and keystone convergence ratios',
+      'Spatial containment audit of OCR text within detected perimeter'
     ]
   },
   {
     id: 'stage-5',
     stepNumber: '05',
-    name: 'Human Review',
-    subtitle: 'Examiner Decision & Summary',
-    description: 'A clear adjudication view for authorized personnel to inspect flagged findings and record an official determination.',
+    name: 'Screening Dossier',
+    subtitle: 'Audit Report & Export',
+    description: 'Consolidated preliminary assessment report, privacy masking toggles (anonymized names, masked IDs), and JSON/Text export.',
     iconName: 'ClipboardCheck',
-    status: 'planned',
+    status: 'implemented',
     details: [
-      'Side-by-side display of original document and inspection findings',
-      'Highlighted areas of concern requiring manual examination',
-      'Options to approve, flag, or request re-capture',
-      'Exportable case summary report for institutional recordkeeping'
+      'Deterministic preliminary triage rating (Standard / Manual Review)',
+      'Explainable findings catalogue with technical impact notes',
+      'Privacy controls: candidate fields and raw OCR redacted by default',
+      'One-click client-side RFC-8259 JSON and Plain-Text dossier export'
     ]
   }
 ]

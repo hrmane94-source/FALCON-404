@@ -6,7 +6,8 @@ import {
   Check,
   Sliders,
   Sparkles,
-  Scan
+  Scan,
+  Lock
 } from 'lucide-react'
 import type {
   ScreeningReportData,
@@ -75,7 +76,7 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
     const jsonStr = generateScreeningReportJson(reportData)
     const filename = `FALCON-Report-${documentName.replace(/[^a-zA-Z0-9_\-]/g, '_')}-${Date.now()}.json`
     downloadReportFile(jsonStr, filename, 'application/json')
-    setDownloadSuccess('JSON Report downloaded')
+    setDownloadSuccess('JSON REPORT DOWNLOADED')
     setTimeout(() => setDownloadSuccess(null), 3000)
   }
 
@@ -83,7 +84,7 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
     const textStr = generateScreeningReportText(reportData)
     const filename = `FALCON-Report-${documentName.replace(/[^a-zA-Z0-9_\-]/g, '_')}-${Date.now()}.txt`
     downloadReportFile(textStr, filename, 'text/plain')
-    setDownloadSuccess('Text Dossier downloaded')
+    setDownloadSuccess('TEXT DOSSIER DOWNLOADED')
     setTimeout(() => setDownloadSuccess(null), 3000)
   }
 
@@ -91,151 +92,143 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
 
   return (
     <Card
-      title="Preliminary Screening Report"
-      subtitle={`Generated ${nowFormatted} • Dossier Ref: ${reportId} • ${PROJECT_BRANDING.projectDeveloperCredit}`}
+      sectionCode="STAGE // 05"
+      title="Preliminary Screening Dossier"
+      subtitle={`Generated ${nowFormatted} • Dossier Ref: ${reportId} • ${PROJECT_BRANDING.developerAttribution}`}
       action={
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 font-mono">
           {assessment.priority === 'standard' && (
             <Badge variant="success" size="sm">
-              Standard Triage
+              STANDARD TRIAGE
             </Badge>
           )}
           {assessment.priority === 'manual-review' && (
             <Badge variant="warning" size="sm">
-              Manual Review Required
+              MANUAL REVIEW REQUIRED
             </Badge>
           )}
           {assessment.priority === 'inconclusive' && (
             <Badge variant="neutral" size="sm">
-              Analysis Inconclusive
+              INCONCLUSIVE
             </Badge>
           )}
         </div>
       }
     >
-      <div className="space-y-6">
-        {/* SECTION A: DOCUMENT OVERVIEW */}
-        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-800">
-              A. Intake &amp; Overview
+      <div className="space-y-6 font-sans">
+        {/* SECTION A: INTAKE OVERVIEW */}
+        <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 space-y-3 font-mono">
+          <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800 pb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+              SECTION A // INTAKE SPECIFICATIONS
             </span>
-            <span className="text-[11px] font-mono text-slate-500">{integrityResult.fileProperties.fileName}</span>
+            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{integrityResult.fileProperties.fileName}</span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
             <div>
-              <span className="text-[10px] uppercase font-mono text-slate-400 block">Intake Selection</span>
-              <span className="font-semibold text-slate-900">{selectedDocumentType}</span>
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block">STANDARD SELECTED</span>
+              <span className="font-bold text-slate-900 dark:text-slate-100">{selectedDocumentType}</span>
             </div>
             <div>
-              <span className="text-[10px] uppercase font-mono text-slate-400 block">OCR Classification</span>
-              <span className="font-medium text-slate-800">
-                {detectedDocTypeField ? detectedDocTypeField.value : 'Unclassified'}
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block">OCR CLASSIFICATION</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">
+                {detectedDocTypeField ? detectedDocTypeField.value : 'UNCLASSIFIED'}
               </span>
             </div>
             <div>
-              <span className="text-[10px] uppercase font-mono text-slate-400 block">OCR Recognition</span>
-              <span className="font-medium text-slate-800">
-                {ocrStatus === 'success' ? `Complete (${ocrResult?.confidence ?? 'N/A'}% Quality)` : ocrStatus.toUpperCase()}
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block">OCR STATUS</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">
+                {ocrStatus === 'success' ? `COMPLETE (${ocrResult?.confidence ?? 'N/A'}% QUAL)` : ocrStatus.toUpperCase()}
               </span>
             </div>
             <div>
-              <span className="text-[10px] uppercase font-mono text-slate-400 block">Raster &amp; Format</span>
-              <span className="font-medium text-slate-800">
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block">RASTER MATRIX</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">
                 {quality.width} × {quality.height} • {metadata.format}
               </span>
             </div>
           </div>
         </div>
 
-        {/* SECTION B & C: QUALITY & INTEGRITY SUMMARY */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+        {/* SECTION B & C: QUALITY & FORENSIC CHECKS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
           {/* Quality Audit Column */}
-          <div className="p-4 rounded-xl bg-white border border-slate-200/80 space-y-2.5">
-            <div className="flex items-center gap-1.5 font-bold text-slate-800 border-b border-slate-100 pb-2">
-              <Sliders className="w-3.5 h-3.5 text-blue-600" />
-              <span>B. Image Quality Assessment</span>
+          <div className="p-4 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-2.5">
+            <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-slate-800 pb-2">
+              <Sliders className="w-3.5 h-3.5 text-orange-500" />
+              <span>SECTION B // RASTER METRICS</span>
             </div>
 
             <div className="space-y-1.5 text-[11px]">
               <div className="flex justify-between">
-                <span className="text-slate-500">Dimensions Check:</span>
-                <span className={quality.isLowResolution ? 'font-medium text-amber-700' : 'text-slate-800'}>
-                  {quality.width} × {quality.height} px {quality.isLowResolution ? '(Sub-optimal)' : '(Adequate)'}
+                <span className="text-slate-400 dark:text-slate-500">DIMENSIONS:</span>
+                <span className={quality.isLowResolution ? 'font-bold text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200 font-bold'}>
+                  {quality.width} × {quality.height} PX {quality.isLowResolution ? '(SUB-OPTIMAL)' : '(ADEQUATE)'}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Raster Aspect Ratio:</span>
-                <span className="text-slate-800 font-medium">
+                <span className="text-slate-400 dark:text-slate-500">ASPECT RATIO:</span>
+                <span className="text-slate-800 dark:text-slate-200 font-bold">
                   {quality.aspectRatio} ({quality.aspectRatioLabel})
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Luminance / Exposure:</span>
-                <span className={quality.isExtremeLuminance ? 'font-medium text-amber-700' : 'text-slate-800'}>
-                  {quality.meanLuminance} / 255 {quality.isExtremeLuminance ? '(Extreme)' : '(Balanced)'}
+                <span className="text-slate-400 dark:text-slate-500">LUMINANCE:</span>
+                <span className={quality.isExtremeLuminance ? 'font-bold text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200 font-bold'}>
+                  {quality.meanLuminance} / 255 {quality.isExtremeLuminance ? '(EXTREME)' : '(BALANCED)'}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">RMS Contrast:</span>
-                <span className={quality.isLowContrast ? 'font-medium text-amber-700' : 'text-slate-800'}>
-                  {quality.contrastStdDev} {quality.isLowContrast ? '(Compressed range)' : '(Good separation)'}
+                <span className="text-slate-400 dark:text-slate-500">RMS CONTRAST:</span>
+                <span className={quality.isLowContrast ? 'font-bold text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200 font-bold'}>
+                  {quality.contrastStdDev} {quality.isLowContrast ? '(COMPRESSED)' : '(OPTIMAL)'}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Edge Sharpness:</span>
-                <span className={quality.isPotentialBlur ? 'font-medium text-amber-700' : 'text-slate-800'}>
-                  {quality.blurScore} variance {quality.isPotentialBlur ? '(Potential blur)' : '(Sharp)'}
+                <span className="text-slate-400 dark:text-slate-500">LAPLACIAN SHARPNESS:</span>
+                <span className={quality.isPotentialBlur ? 'font-bold text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200 font-bold'}>
+                  {quality.blurScore} {quality.isPotentialBlur ? '(POTENTIAL BLUR)' : '(SHARP)'}
                 </span>
-              </div>
-              <div className="text-[10px] text-slate-400 italic pt-1 border-t border-slate-100">
-                {quality.physicalRatioNote}
               </div>
             </div>
           </div>
 
-          {/* Integrity & ELA Column */}
-          <div className="p-4 rounded-xl bg-white border border-slate-200/80 space-y-2.5">
-            <div className="flex items-center gap-1.5 font-bold text-slate-800 border-b border-slate-100 pb-2">
-              <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-              <span>C. Image Integrity &amp; Forensic Checks</span>
+          {/* Forensic Checks Column */}
+          <div className="p-4 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-2.5">
+            <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-slate-800 pb-2">
+              <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+              <span>SECTION C // FORENSIC INTEGRITY</span>
             </div>
 
             <div className="space-y-1.5 text-[11px]">
               <div className="flex justify-between">
-                <span className="text-slate-500">Container Format:</span>
-                <span className="text-slate-800 font-medium truncate max-w-[200px]" title={metadata.containerStatusLabel}>
+                <span className="text-slate-400 dark:text-slate-500">CONTAINER FORMAT:</span>
+                <span className="text-slate-800 dark:text-slate-200 font-bold truncate max-w-[200px]" title={metadata.containerStatusLabel}>
                   {metadata.containerStatusLabel}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">EXIF Headers:</span>
-                <span className="text-slate-800 truncate max-w-[200px]" title={metadata.exifStatusLabel}>
+                <span className="text-slate-400 dark:text-slate-500">EXIF HEADERS:</span>
+                <span className="text-slate-800 dark:text-slate-200 font-bold truncate max-w-[200px]" title={metadata.exifStatusLabel}>
                   {metadata.exifStatusLabel}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Software Signatures:</span>
-                <span className={metadata.softwareDetected ? 'font-medium text-amber-700' : 'text-slate-800'} title={metadata.softwareStatusLabel}>
+                <span className="text-slate-400 dark:text-slate-500">SOFTWARE SIGNATURE:</span>
+                <span className={metadata.softwareDetected ? 'font-bold text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200 font-bold'} title={metadata.softwareStatusLabel}>
                   {metadata.softwareStatusLabel}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Capture Device:</span>
-                <span className="text-slate-800 truncate max-w-[200px]" title={metadata.cameraStatusLabel}>
-                  {metadata.cameraStatusLabel}
+                <span className="text-slate-400 dark:text-slate-500">ELA VARIANCE:</span>
+                <span className={ela.variance > 0.15 ? 'font-bold text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200 font-bold'}>
+                  {ela.supported ? `${Math.round(ela.variance * 100)}% HIGH VARIANCE` : 'SKIPPED (NON-JPEG)'}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Error Level Analysis:</span>
-                <span className={ela.variance > 0.15 ? 'font-medium text-amber-700' : 'text-slate-800'}>
-                  {ela.supported ? `${Math.round(ela.variance * 100)}% high variance` : 'Skipped (Non-JPEG)'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Forensic Note:</span>
-                <span className="text-slate-700 truncate max-w-[200px]" title={ela.assessmentNote}>
+                <span className="text-slate-400 dark:text-slate-500">FORENSIC NOTE:</span>
+                <span className="text-slate-700 dark:text-slate-300 font-medium truncate max-w-[200px]" title={ela.assessmentNote}>
                   {ela.assessmentNote}
                 </span>
               </div>
@@ -243,13 +236,13 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
           </div>
         </div>
 
-        {/* SECTION D: DOCUMENT BOUNDARY & LAYOUT ANALYSIS */}
+        {/* SECTION D: DOCUMENT BOUNDARY & PERSPECTIVE */}
         {layoutResult && (
-          <div className="p-4 rounded-xl bg-white border border-slate-200/80 space-y-2.5 text-xs">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <div className="flex items-center gap-1.5 font-bold text-slate-800">
-                <Scan className="w-3.5 h-3.5 text-blue-600" />
-                <span>D. Document Boundary, Perspective &amp; Layout Analysis</span>
+          <div className="p-4 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-2.5 text-xs font-mono">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+              <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                <Scan className="w-3.5 h-3.5 text-orange-500" />
+                <span>SECTION D // BOUNDARY &amp; PERSPECTIVE AUDIT</span>
               </div>
               <Badge
                 variant={
@@ -261,57 +254,53 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
                 }
                 size="sm"
               >
-                {layoutResult.statusLabel} (Heuristic Score: {layoutResult.detectorScore}/100)
+                {layoutResult.statusLabel.toUpperCase()} ({layoutResult.detectorScore}/100)
               </Badge>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px] pt-1">
-              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/60">
-                <span className="text-slate-400 uppercase font-mono text-[9px] block">Perimeter &amp; Geometry</span>
-                <span className="font-semibold text-slate-900 block mt-0.5">
-                  {layoutResult.geometry ? `${layoutResult.geometry.averageWidth} × ${layoutResult.geometry.averageHeight} px (${layoutResult.geometry.quadAspectRatio}:1)` : 'Perimeter Uncertain'}
+              <div className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200/60 dark:border-slate-800">
+                <span className="text-slate-400 dark:text-slate-500 uppercase font-mono text-[9px] block">PERIMETER &amp; GEOMETRY</span>
+                <span className="font-bold text-slate-900 dark:text-slate-100 block mt-0.5">
+                  {layoutResult.geometry ? `${layoutResult.geometry.averageWidth} × ${layoutResult.geometry.averageHeight} PX (${layoutResult.geometry.quadAspectRatio}:1)` : 'UNCERTAIN'}
                 </span>
-                <span className="text-slate-500 text-[10px] block mt-0.5">
-                  Coverage: {layoutResult.framing.areaCoveragePercent}% of raster
-                </span>
-              </div>
-
-              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/60">
-                <span className="text-slate-400 uppercase font-mono text-[9px] block">Perspective &amp; Skew</span>
-                <span className="font-semibold text-slate-900 block mt-0.5">
-                  {layoutResult.perspective ? `Keystone: ${layoutResult.perspective.apparentKeystoneRatio} • Tilt: ${layoutResult.perspective.rotationAngleDeg}°` : 'Perspective Unavailable'}
-                </span>
-                <span className="text-slate-500 text-[10px] block mt-0.5">
-                  {layoutResult.perspective?.isSeverePerspective ? 'Off-axis perspective' : 'Near-orthogonal alignment'}
+                <span className="text-slate-500 dark:text-slate-400 text-[10px] block mt-0.5">
+                  COVERAGE: {layoutResult.framing.areaCoveragePercent}% OF RASTER
                 </span>
               </div>
 
-              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/60">
-                <span className="text-slate-400 uppercase font-mono text-[9px] block">Layout Containment</span>
-                <span className="font-semibold text-slate-900 block mt-0.5">
+              <div className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200/60 dark:border-slate-800">
+                <span className="text-slate-400 dark:text-slate-500 uppercase font-mono text-[9px] block">PERSPECTIVE &amp; SKEW</span>
+                <span className="font-bold text-slate-900 dark:text-slate-100 block mt-0.5">
+                  {layoutResult.perspective ? `KEYSTONE: ${layoutResult.perspective.apparentKeystoneRatio} • TILT: ${layoutResult.perspective.rotationAngleDeg}°` : 'UNAVAILABLE'}
+                </span>
+                <span className="text-slate-500 dark:text-slate-400 text-[10px] block mt-0.5">
+                  {layoutResult.perspective?.isSeverePerspective ? 'OFF-AXIS PERSPECTIVE' : 'NEAR-ORTHOGONAL'}
+                </span>
+              </div>
+
+              <div className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200/60 dark:border-slate-800">
+                <span className="text-slate-400 dark:text-slate-500 uppercase font-mono text-[9px] block">LAYOUT CONTAINMENT</span>
+                <span className="font-bold text-slate-900 dark:text-slate-100 block mt-0.5">
                   {layoutResult.layoutQuality.containmentRatio !== null
-                    ? `${layoutResult.layoutQuality.containmentFormatted} text within boundary`
-                    : `Containment: ${layoutResult.layoutQuality.containmentFormatted}`}
+                    ? `${layoutResult.layoutQuality.containmentFormatted} CONTAINED`
+                    : `CONTAINMENT: ${layoutResult.layoutQuality.containmentFormatted}`}
                 </span>
-                <span className="text-slate-500 text-[10px] block mt-0.5">
+                <span className="text-slate-500 dark:text-slate-400 text-[10px] block mt-0.5">
                   {layoutResult.layoutQuality.totalTextRegions > 0
-                    ? `${layoutResult.layoutQuality.regionsInsideBoundary}/${layoutResult.layoutQuality.totalTextRegions} text regions inside`
-                    : 'No OCR text regions available'}
+                    ? `${layoutResult.layoutQuality.regionsInsideBoundary}/${layoutResult.layoutQuality.totalTextRegions} REGIONS INSIDE`
+                    : 'NO TEXT REGIONS'}
                 </span>
               </div>
             </div>
-
-            <p className="text-[11px] text-slate-600 bg-slate-50/70 p-2.5 rounded-lg border border-slate-200/50 leading-relaxed">
-              {layoutResult.framing.assessmentNote}
-            </p>
           </div>
         )}
 
         {/* SECTION E: PRELIMINARY ASSESSMENT & FINDINGS */}
-        <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/80 space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-800">
-              {layoutResult ? 'E. Preliminary Assessment' : 'D. Preliminary Assessment'}
+        <div className="p-4 rounded-lg bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 space-y-3 font-mono">
+          <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800 pb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+              {layoutResult ? 'SECTION E // PRELIMINARY ASSESSMENT' : 'SECTION D // PRELIMINARY ASSESSMENT'}
             </span>
             <Badge
               variant={
@@ -323,26 +312,26 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
               }
               size="sm"
             >
-              Priority: {assessment.priorityLabel}
+              PRIORITY: {assessment.priorityLabel.toUpperCase()}
             </Badge>
           </div>
 
-          <div className="space-y-1 text-xs text-slate-700">
-            <p className="font-semibold text-slate-900">{assessment.summary}</p>
-            <p className="text-[11px] text-slate-600">
-              <strong>Recommended Action:</strong> {assessment.recommendedAction}
+          <div className="space-y-1 text-xs">
+            <p className="font-bold text-slate-900 dark:text-slate-100 font-heading">{assessment.summary}</p>
+            <p className="text-[11px] text-slate-600 dark:text-slate-400 font-sans">
+              <strong>RECOMMENDED ACTION:</strong> {assessment.recommendedAction}
             </p>
           </div>
 
           <div className="pt-1">
-            <span className="text-[10px] uppercase font-mono text-slate-400 block mb-1">
-              Contributing Findings ({assessment.contributingFindings.length})
+            <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-1">
+              CONTRIBUTING FINDINGS ({assessment.contributingFindings.length})
             </span>
             <div className="flex flex-wrap gap-1.5">
               {assessment.contributingFindings.map((f) => (
                 <span
                   key={f.id}
-                  className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[10px] text-slate-700 font-medium"
+                  className="px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[10px] text-slate-700 dark:text-slate-300 font-semibold"
                 >
                   {f.title}
                 </span>
@@ -351,85 +340,70 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
           </div>
         </div>
 
-        {/* SECTION F: INSTITUTIONAL LIMITATIONS & EVALUATION TRANSPARENCY */}
-        <div className="p-4 bg-amber-50/60 rounded-xl border border-amber-200/80 text-[11px] text-amber-950 space-y-2">
-          <div className="flex items-center gap-2 font-bold text-xs text-amber-900">
-            <ShieldAlert className="w-4 h-4 text-amber-600 flex-shrink-0" />
-            <span>{layoutResult ? 'F. Institutional Limitations & Ethical Boundaries' : 'E. Institutional Limitations & Ethical Boundaries'}</span>
+        {/* SECTION F: LIMITATIONS */}
+        <div className="p-4 bg-amber-500/10 dark:bg-amber-950/30 rounded-lg border border-amber-500/30 text-[11px] font-mono text-amber-950 dark:text-amber-200 space-y-2">
+          <div className="flex items-center gap-2 font-bold text-xs uppercase tracking-wider text-amber-900 dark:text-amber-300">
+            <ShieldAlert className="w-4 h-4 text-amber-500 flex-shrink-0" />
+            <span>INSTITUTIONAL LIMITATIONS &amp; EVALUATION BOUNDARIES</span>
           </div>
-          <ul className="list-disc list-inside space-y-1 text-amber-900/90 leading-relaxed">
+          <ul className="list-disc list-inside space-y-1 leading-relaxed font-sans text-amber-900/90 dark:text-amber-200/90 text-xs">
             <li>
-              <strong>No Authenticity Verdict:</strong> This system does NOT certify this document as authentic or legally genuine.
+              <strong>No Authenticity Verdict:</strong> FALCON screening does NOT certify this document as authentic or genuine.
             </li>
             <li>
-              <strong>No Definite Fraud Classification:</strong> Quality flags and compression variations indicate areas for inspection; they do not establish fraud.
+              <strong>No Definite Fraud Classification:</strong> Quality flags represent inspection cues; they do not establish fraud.
             </li>
             <li>
-              <strong>Format Constraints:</strong> Non-JPEG images cannot be evaluated with Error Level Analysis.
-            </li>
-            <li>
-              <strong>No External Registry Connection:</strong> Document numbers have not been verified against government databases (e.g. UIDAI CIDR or NSDL).
-            </li>
-            <li>
-              <strong>Boundary Estimates:</strong> Edge detection and perspective calculations are automated heuristics and do not certify physical edge integrity.
+              <strong>No External Registry Query:</strong> Candidate identifiers are parsed locally and not queried against government databases.
             </li>
           </ul>
         </div>
 
         {/* SECTION G: PRIVACY CONTROLS & EXPORT */}
-        <div className="pt-3 border-t border-slate-200/80 space-y-3">
-          <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-2">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">
-              <ShieldAlert className="w-3.5 h-3.5 text-slate-600" />
-              <span>Export Privacy Controls (Default: Redacted &amp; Masked)</span>
+        <div className="pt-3 border-t border-slate-200/80 dark:border-slate-800 space-y-3 font-mono">
+          <div className="p-3 bg-slate-50/80 dark:bg-slate-950/60 rounded-lg border border-slate-200/80 dark:border-slate-800 space-y-2">
+            <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+              <Lock className="w-3.5 h-3.5 text-orange-500" />
+              <span>EXPORT PRIVACY CONTROLS (DEFAULT: MASKED &amp; REDACTED)</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              <label className="flex items-start gap-2 text-slate-700 cursor-pointer select-none">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-sans">
+              <label className="flex items-start gap-2 text-slate-700 dark:text-slate-300 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={includeIdentifiableFields}
                   onChange={(e) => setIncludeIdentifiableFields(e.target.checked)}
-                  className="w-3.5 h-3.5 mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  className="w-3.5 h-3.5 mt-0.5 rounded border-slate-300 dark:border-slate-700 text-orange-600 focus:ring-orange-500 cursor-pointer"
                 />
                 <span className="leading-tight">
-                  <strong className="block text-slate-900 font-medium">Unmask candidate identity fields</strong>
-                  <span className="text-[10px] text-slate-500">Includes raw names, IDs, dates of birth (masked by default)</span>
+                  <strong className="block text-slate-900 dark:text-slate-100 font-medium">Unmask candidate identity fields</strong>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400">Includes names, IDs, dates of birth (masked by default)</span>
                 </span>
               </label>
 
-              <label className="flex items-start gap-2 text-slate-700 cursor-pointer select-none">
+              <label className="flex items-start gap-2 text-slate-700 dark:text-slate-300 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={includeFullOCR}
                   onChange={(e) => setIncludeFullOCR(e.target.checked)}
-                  className="w-3.5 h-3.5 mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  className="w-3.5 h-3.5 mt-0.5 rounded border-slate-300 dark:border-slate-700 text-orange-600 focus:ring-orange-500 cursor-pointer"
                 />
                 <span className="leading-tight">
-                  <strong className="block text-slate-900 font-medium">Include raw OCR text buffer</strong>
-                  <span className="text-[10px] text-slate-500">Includes full extracted text buffer (redacted by default)</span>
+                  <strong className="block text-slate-900 dark:text-slate-100 font-medium">Include raw OCR text buffer</strong>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400">Includes unparsed character dump (redacted by default)</span>
                 </span>
               </label>
             </div>
-
-            {(includeIdentifiableFields || includeFullOCR) && (
-              <div className="p-2.5 bg-amber-50 rounded-lg border border-amber-300/80 text-[11px] text-amber-950 flex items-start gap-2 animate-in fade-in">
-                <ShieldAlert className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
-                <p className="leading-relaxed">
-                  <strong>Privacy Notice:</strong> You have opted to include sensitive personal identity details or raw OCR buffers in the exported report. Ensure this export is stored securely and handled in compliance with organizational data protection standards and applicable privacy legislation.
-                </p>
-              </div>
-            )}
           </div>
 
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-            <span className="text-[11px] text-slate-400">
-              Exports execute 100% locally in browser memory. No data is uploaded.
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-mono">
+              EXPORTS EXECUTE 100% LOCALLY IN BROWSER MEMORY
             </span>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 font-mono">
               {downloadSuccess && (
-                <span className="text-xs text-emerald-700 font-medium flex items-center gap-1 animate-in fade-in">
+                <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 animate-in fade-in">
                   <Check className="w-3.5 h-3.5" />
                   <span>{downloadSuccess}</span>
                 </span>
@@ -439,35 +413,35 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
                 type="button"
                 disabled={disabled}
                 onClick={handleExportText}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded text-xs font-bold uppercase tracking-wider border transition-all cursor-pointer ${
                   disabled
-                    ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
-                    : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200/90 hover:border-slate-300 shadow-2xs'
+                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700 cursor-not-allowed'
+                    : 'bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-300 dark:border-slate-700 shadow-2xs'
                 }`}
               >
                 <FileText className="w-3.5 h-3.5 text-slate-500" />
-                <span>Download Text Dossier</span>
+                <span>TEXT DOSSIER</span>
               </button>
 
               <button
                 type="button"
                 disabled={disabled}
                 onClick={handleExportJson}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold shadow-xs transition-all cursor-pointer ${
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded text-xs font-bold uppercase tracking-wider shadow-xs transition-all cursor-pointer ${
                   disabled
-                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                    : 'bg-slate-900 hover:bg-slate-800 text-white'
+                    ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed'
+                    : 'bg-orange-600 hover:bg-orange-700 text-white shadow-orange-600/20'
                 }`}
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>Export JSON Report</span>
+                <span>EXPORT JSON REPORT</span>
               </button>
             </div>
           </div>
 
-          <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-slate-400 gap-1">
-            <span className="font-medium text-slate-500">{PROJECT_BRANDING.projectDeveloperCredit}</span>
-            <span>Institutional Identity Screening Terminal</span>
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between text-[10px] font-mono text-slate-400 dark:text-slate-500 gap-1 uppercase tracking-wider">
+            <span>{PROJECT_BRANDING.developerAttribution} // FALCON-404</span>
+            <span>INSTITUTIONAL SCREENING DOSSIER</span>
           </div>
         </div>
       </div>

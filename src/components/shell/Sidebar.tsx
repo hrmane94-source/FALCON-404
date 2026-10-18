@@ -5,11 +5,13 @@ import {
   FileText,
   SlidersHorizontal,
   FolderArchive,
-  ShieldCheck,
-  X
+  X,
+  Cpu,
+  ShieldCheck
 } from 'lucide-react'
 import type { NavigationSection } from '../../types'
 import { PROJECT_BRANDING } from '../../constants/branding'
+import { FalconEmblem } from '../common/FalconEmblem'
 
 export interface SidebarProps {
   currentSection: NavigationSection
@@ -20,6 +22,7 @@ export interface SidebarProps {
 
 interface NavItemConfig {
   id: NavigationSection
+  stageIndex: string
   label: string
   icon: React.ComponentType<{ className?: string }>
   badge?: string
@@ -34,30 +37,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems: NavItemConfig[] = [
     {
       id: 'overview',
-      label: 'Overview',
+      stageIndex: '01',
+      label: 'System Overview',
       icon: LayoutDashboard
     },
     {
       id: 'new-verification',
-      label: 'New Verification',
+      stageIndex: '02',
+      label: 'Document Intake & Screening',
       icon: PlusCircle
     },
     {
       id: 'case-history',
+      stageIndex: '03',
       label: 'Case History',
       icon: FolderArchive
     },
     {
       id: 'reports',
-      label: 'Reports',
+      stageIndex: '04',
+      label: 'Audit Reports',
       icon: FileText,
-      badge: 'Planned'
+      badge: 'Dossier Active'
     },
     {
       id: 'settings',
-      label: 'Settings',
-      icon: SlidersHorizontal,
-      badge: 'Planned'
+      stageIndex: '05',
+      label: 'Platform Settings',
+      icon: SlidersHorizontal
     }
   ]
 
@@ -66,52 +73,61 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Mobile Backdrop */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-xs lg:hidden"
+          className="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-xs lg:hidden"
           onClick={onClose}
           aria-hidden="true"
         />
       )}
 
-      {/* Sidebar Container */}
+      {/* Forensic Navigation Rail */}
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 w-64 bg-white text-slate-700 flex flex-col border-r border-slate-200/80 transition-transform duration-200 ease-in-out lg:translate-x-0 ${
+        className={`fixed top-0 bottom-0 left-0 z-50 w-72 bg-white dark:bg-[#090d16] text-slate-700 dark:text-slate-300 flex flex-col border-r border-slate-200/90 dark:border-slate-800/90 transition-transform duration-200 ease-in-out lg:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        {/* Header / Brand */}
-        <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between">
+        {/* Header / Brand Identity with Official Falcon Emblem */}
+        <div className="p-5 border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/40 dark:bg-slate-900/40 flex items-start justify-between">
           <div>
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center flex-shrink-0">
-                <ShieldCheck className="w-4.5 h-4.5 text-orange-400" />
+            <div className="flex items-center gap-3">
+              <div className="p-1.5 rounded-lg bg-slate-900 dark:bg-slate-800/90 text-white border border-slate-800 dark:border-slate-700 shadow-xs flex-shrink-0">
+                <FalconEmblem size={24} />
               </div>
-              <div>
-                <span className="font-bold text-lg tracking-tight text-slate-900 block leading-tight">
+              <div className="min-w-0">
+                <span className="font-heading font-bold text-base tracking-tight text-slate-950 dark:text-slate-50 block leading-none">
                   {PROJECT_BRANDING.projectName}
                 </span>
-                <span className="text-[11px] text-slate-500 font-normal block leading-tight">
-                  Document Screening
+                <span className="font-mono text-[10px] tracking-widest uppercase text-blue-600 dark:text-blue-400 font-semibold block mt-1">
+                  Forensic Intelligence
                 </span>
               </div>
             </div>
 
-            <p className="text-[11px] text-slate-400 mt-2.5 font-normal leading-snug">
-              Seva First Innovation Challenge 2026
-            </p>
+            <div className="mt-3 flex items-center gap-2 text-[10px] font-mono text-slate-400 dark:text-slate-500">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>TERMINAL // ONLINE</span>
+              <span>•</span>
+              <span>WASM // ACTIVE</span>
+            </div>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 -mr-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 lg:hidden cursor-pointer"
+            className="p-1.5 -mr-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden cursor-pointer"
             aria-label="Close menu"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Navigation Items */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        {/* Technical Group Header */}
+        <div className="px-5 pt-4 pb-1 text-[10px] font-mono uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center justify-between">
+          <span>Screening Workstation</span>
+          <span>SEC // 01</span>
+        </div>
+
+        {/* Navigation Items Rail */}
+        <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const isActive = currentSection === item.id
             const Icon = item.icon
@@ -123,23 +139,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onNavigate(item.id)
                   onClose()
                 }}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-colors cursor-pointer text-left ${
+                className={`w-full group flex items-center justify-between px-3 py-2.5 rounded-lg text-xs transition-all cursor-pointer text-left ${
                   isActive
-                    ? 'bg-blue-50/80 text-blue-700 font-semibold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 font-normal'
+                    ? 'bg-blue-50/90 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 font-semibold border-l-2 border-blue-600 dark:border-blue-500 shadow-2xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100/70 dark:hover:bg-slate-800/50 font-normal'
                 }`}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span
+                    className={`font-mono text-[10px] tracking-tighter ${
+                      isActive ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-slate-400 dark:text-slate-600'
+                    }`}
+                  >
+                    {item.stageIndex}
+                  </span>
                   <Icon
-                    className={`w-4 h-4 flex-shrink-0 ${
-                      isActive ? 'text-blue-600' : 'text-slate-400'
+                    className={`w-4 h-4 flex-shrink-0 transition-colors ${
+                      isActive ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'
                     }`}
                   />
-                  <span>{item.label}</span>
+                  <span className="truncate">{item.label}</span>
                 </div>
 
                 {item.badge && (
-                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-100/60 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200/50 dark:border-blue-800/60 font-medium">
                     {item.badge}
                   </span>
                 )}
@@ -148,19 +171,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </nav>
 
-        {/* Developer Attribution & System status note */}
-        <div className="p-4 border-t border-slate-100 bg-slate-50/50 space-y-2.5">
-          <div className="text-[11px] leading-tight">
-            <span className="text-slate-400 block font-normal text-[10px] uppercase tracking-wider">
-              Developed by
-            </span>
-            <span className="font-semibold text-slate-800 text-xs">
-              {PROJECT_BRANDING.developerName}
-            </span>
+        {/* Workstation Specification & Developer Attribution Footer */}
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/50 dark:bg-[#070b12]/60 space-y-3">
+          {/* Workstation Capabilities Indicator */}
+          <div className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 space-y-1.5 text-[10px]">
+            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 font-mono">
+              <span className="flex items-center gap-1.5">
+                <Cpu className="w-3 h-3 text-blue-500" />
+                <span>ENGINES</span>
+              </span>
+              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">ALL LOCAL</span>
+            </div>
+            <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+              Tesseract OCR • Canvas ELA • Edge Quad Geometry
+            </div>
           </div>
-          <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-200/50">
-            <span className="text-slate-500 font-medium">Phase 1</span>
-            <span className="text-slate-400">Frontend Prototype</span>
+
+          {/* Explicit Developer Attribution */}
+          <div className="pt-1 flex items-center justify-between">
+            <div className="min-w-0">
+              <span className="text-slate-400 dark:text-slate-500 block font-mono text-[9px] uppercase tracking-wider">
+                Developed by
+              </span>
+              <span className="font-heading font-semibold text-slate-900 dark:text-slate-200 text-xs truncate block">
+                {PROJECT_BRANDING.developerName}
+              </span>
+            </div>
+            <div className="flex items-center gap-1 text-[10px] font-mono text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800/80 px-2 py-0.5 rounded border border-slate-200/60 dark:border-slate-700/60">
+              <ShieldCheck className="w-3 h-3 text-orange-500" />
+              <span>GEN 2</span>
+            </div>
           </div>
         </div>
       </aside>

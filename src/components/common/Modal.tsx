@@ -46,30 +46,30 @@ export const Modal: React.FC<ModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-900/30 backdrop-blur-xs transition-opacity"
+        className="fixed inset-0 bg-slate-900/40 dark:bg-black/60 backdrop-blur-xs transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
 
       {/* Modal Dialog */}
       <div
-        className={`relative w-full ${maxWidthClasses} bg-white rounded-xl shadow-xl border border-slate-200/80 z-10 overflow-hidden transform transition-all my-8`}
+        className={`relative w-full ${maxWidthClasses} bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200/80 dark:border-slate-800 z-10 overflow-hidden transform transition-all my-8`}
         role="dialog"
         aria-modal="true"
       >
-        <div className="flex items-start justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+        <div className="flex items-start justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40">
           <div>
-            <h3 className="text-sm font-semibold text-slate-900 tracking-tight">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
               {title}
             </h3>
             {subtitle && (
-              <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{subtitle}</p>
             )}
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 -mr-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+            className="p-1 -mr-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             aria-label="Close dialog"
           >
             <X className="w-4 h-4" />

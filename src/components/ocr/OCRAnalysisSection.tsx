@@ -14,8 +14,8 @@ import {
   Hash,
   CreditCard,
   Binary,
-  Layers,
-  FileQuestion
+  FileQuestion,
+  Terminal
 } from 'lucide-react'
 import type { OCRProgress, OCRResult, OCRStatus, CandidateCategory } from '../../types'
 import { Card } from '../common/Card'
@@ -48,24 +48,24 @@ export const OCRAnalysisSection: React.FC<OCRAnalysisSectionProps> = ({
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      // Fallback if clipboard API is not permitted
+      // Fallback
     }
   }
 
   const getCategoryIcon = (category: CandidateCategory) => {
     switch (category) {
       case 'document-type':
-        return <CreditCard className="w-3.5 h-3.5 text-blue-600" />
+        return <CreditCard className="w-3.5 h-3.5 text-orange-500" />
       case 'identifier':
-        return <Hash className="w-3.5 h-3.5 text-indigo-600" />
+        return <Hash className="w-3.5 h-3.5 text-blue-500" />
       case 'name':
-        return <User className="w-3.5 h-3.5 text-emerald-600" />
+        return <User className="w-3.5 h-3.5 text-emerald-500" />
       case 'date':
-        return <Calendar className="w-3.5 h-3.5 text-amber-600" />
+        return <Calendar className="w-3.5 h-3.5 text-amber-500" />
       case 'mrz':
-        return <Binary className="w-3.5 h-3.5 text-purple-600" />
+        return <Binary className="w-3.5 h-3.5 text-purple-500" />
       default:
-        return <FileText className="w-3.5 h-3.5 text-slate-600" />
+        return <FileText className="w-3.5 h-3.5 text-slate-400" />
     }
   }
 
@@ -73,11 +73,11 @@ export const OCRAnalysisSection: React.FC<OCRAnalysisSectionProps> = ({
     if (!hasText) {
       return (
         <Badge variant="neutral" title="No readable alphanumeric text detected by OCR engine">
-          OCR Confidence: N/A
+          CONFIDENCE: N/A
         </Badge>
       )
     }
-    const label = `OCR Engine Confidence: ${confidence}%`
+    const label = `CONFIDENCE: ${confidence}%`
     const titleText =
       'Tesseract optical character recognition quality metric (0-100%). Measures glyph transcription clarity, NOT document authenticity, validity, or fraud likelihood.'
     if (confidence >= 80) {
@@ -105,48 +105,49 @@ export const OCRAnalysisSection: React.FC<OCRAnalysisSectionProps> = ({
   if (ocrStatus === 'idle') {
     return (
       <Card
-        title="Stage 02: Optical Character Recognition (OCR)"
+        sectionCode="STAGE // 02"
+        title="Optical Character Recognition (OCR)"
         subtitle="In-browser WebAssembly character recognition via Tesseract.js v7"
         action={
           <Badge variant="neutral" size="sm">
-            Ready to Analyze
+            READY // STANDBY
           </Badge>
         }
       >
-        <div className="space-y-4">
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 text-xs text-slate-600 space-y-2">
-            <div className="flex items-center gap-2 font-semibold text-slate-900">
-              <FileSearch className="w-4 h-4 text-blue-600" />
-              <span>Client-Side Document Text Extraction</span>
+        <div className="space-y-4 font-sans">
+          <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 space-y-2">
+            <div className="flex items-center gap-2 font-mono font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100">
+              <FileSearch className="w-4 h-4 text-orange-500" />
+              <span>CLIENT-SIDE GLYPH &amp; FIELD EXTRACTION</span>
             </div>
             <p className="leading-relaxed">
-              Execute genuine client-side OCR on this document image. The engine runs locally in a background WebAssembly worker to extract document numbers, candidate names, dates, and MRZ lines without transmitting image data to remote servers.
+              Execute client-side OCR on this document raster. The neural LSTM engine runs locally in a dedicated WebAssembly background worker to extract document numbers, candidate names, dates, and MRZ lines without exposing private image pixels to external servers.
             </p>
           </div>
 
-          <div className="p-3 bg-amber-50/70 rounded-xl border border-amber-200/60 text-[11px] text-amber-900 flex items-start gap-2">
-            <ShieldAlert className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="p-3 bg-amber-500/10 dark:bg-amber-950/30 rounded-lg border border-amber-500/30 text-[11px] text-amber-900 dark:text-amber-200 flex items-start gap-2 font-mono">
+            <ShieldAlert className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
             <p>
-              <strong>Evaluation Transparency:</strong> OCR transcribes visible alphanumeric characters. It does not authenticate this document or confirm that the holder exists in institutional registries.
+              <strong>EVALUATION PROTOCOL:</strong> Optical transcription transcribes surface text characters. It does not authenticate this document or verify existence against institutional registries.
             </p>
           </div>
 
-          <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <span className="text-[11px] text-slate-400">
-              Engine: Tesseract.js v7 (LSTM Model • In-Browser WASM)
+          <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono">
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+              ENGINE // TESSERACT V7 (WASM LSTM • LOCAL THREAD)
             </span>
             <button
               type="button"
               disabled={disabled}
               onClick={onRunOCR}
-              className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold shadow-xs transition-all cursor-pointer ${
+              className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs font-mono font-bold uppercase tracking-wider shadow-xs transition-all cursor-pointer ${
                 disabled
-                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20 hover:shadow-md'
+                  ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed'
+                  : 'bg-orange-600 hover:bg-orange-700 text-white shadow-orange-600/20 hover:shadow-md'
               }`}
             >
               <FileSearch className="w-4 h-4" />
-              <span>Run OCR Analysis</span>
+              <span>EXECUTE OCR PARSER</span>
             </button>
           </div>
         </div>
@@ -154,7 +155,7 @@ export const OCRAnalysisSection: React.FC<OCRAnalysisSectionProps> = ({
     )
   }
 
-  // 2. STATE: PROCESSING (INITIALIZING OR RECOGNIZING)
+  // 2. STATE: PROCESSING
   if (ocrStatus === 'initializing' || ocrStatus === 'recognizing') {
     const isRecognizing = ocrProgress?.stage === 'recognizing'
     const progressPercent = typeof ocrProgress?.progress === 'number'
@@ -163,48 +164,48 @@ export const OCRAnalysisSection: React.FC<OCRAnalysisSectionProps> = ({
 
     return (
       <Card
-        title="Stage 02: Optical Character Recognition (OCR)"
-        subtitle="Processing in isolated WebAssembly worker..."
+        sectionCode="STAGE // 02"
+        title="Optical Character Recognition (OCR)"
+        subtitle="Processing in isolated WebAssembly worker thread..."
         action={
           <Badge variant="info" size="sm" className="animate-pulse">
             <Loader2 className="w-3 h-3 animate-spin" />
-            <span>Analyzing...</span>
+            <span>ANALYZING...</span>
           </Badge>
         }
       >
-        <div className="space-y-4 py-2">
-          {/* Progress Card */}
-          <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-200/80 space-y-3">
+        <div className="space-y-4 py-2 font-sans">
+          <div className="p-4 rounded-lg bg-orange-50/50 dark:bg-orange-950/20 border border-orange-200/80 dark:border-orange-900/40 space-y-3 font-mono">
             <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2 font-medium text-blue-900">
-                <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />
-                <span>{ocrProgress?.status || 'Processing document characters...'}</span>
+              <div className="flex items-center gap-2 font-bold text-orange-950 dark:text-orange-200 tracking-wider uppercase">
+                <Loader2 className="w-4 h-4 text-orange-500 animate-spin" />
+                <span>{ocrProgress?.status || 'Processing document glyphs...'}</span>
               </div>
               {isRecognizing && (
-                <span className="font-mono font-semibold text-blue-700 text-xs">
+                <span className="font-mono font-bold text-orange-600 dark:text-orange-400 text-xs">
                   {progressPercent}%
                 </span>
               )}
             </div>
 
-            {/* Real Progress Bar */}
-            <div className="w-full h-2.5 bg-blue-100 rounded-full overflow-hidden">
+            {/* Precision Progress Bar */}
+            <div className="w-full h-2 bg-orange-100 dark:bg-orange-950/60 rounded-full overflow-hidden">
               <div
-                className="h-full bg-blue-600 rounded-full transition-all duration-300 ease-out"
+                className="h-full bg-orange-500 dark:bg-orange-400 rounded-full transition-all duration-300 ease-out shadow-[0_0_8px_rgba(249,115,22,0.8)]"
                 style={{
                   width: isRecognizing ? `${Math.max(5, progressPercent)}%` : '20%'
                 }}
               />
             </div>
 
-            <div className="flex items-center justify-between text-[11px] text-blue-700/80">
-              <span>Stage: {isRecognizing ? 'Character Recognition' : 'Engine Initialization'}</span>
-              <span>Local WebAssembly Runtime</span>
+            <div className="flex items-center justify-between text-[10px] text-orange-800/80 dark:text-orange-300/80 uppercase tracking-wider">
+              <span>STAGE // {isRecognizing ? 'CHARACTER RECOGNITION' : 'WASM INITIALIZATION'}</span>
+              <span>SANDBOX // LOCAL ENGINE</span>
             </div>
           </div>
 
-          <p className="text-[11px] text-slate-500 leading-relaxed">
-            Please wait while the document raster is analyzed. On initial execution, the English recognition dataset (~4MB) is fetched once and cached locally.
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed font-sans">
+            Please wait while the document raster is analyzed. On initial execution, the English recognition dataset (~4MB) is fetched once and cached in browser memory.
           </p>
         </div>
       </Card>
@@ -215,36 +216,28 @@ export const OCRAnalysisSection: React.FC<OCRAnalysisSectionProps> = ({
   if (ocrStatus === 'error') {
     return (
       <Card
-        title="Stage 02: Optical Character Recognition (OCR)"
-        subtitle="Text extraction encountered an issue"
+        sectionCode="STAGE // 02"
+        title="Optical Character Recognition (OCR)"
+        subtitle="Text extraction encountered a critical execution fault"
         action={
           <Badge variant="danger" size="sm">
-            Analysis Failed
+            EXECUTION FAILED
           </Badge>
         }
       >
-        <div className="space-y-4">
-          <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs space-y-2">
+        <div className="space-y-4 font-sans">
+          <div className="p-4 rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900/60 text-rose-900 dark:text-rose-200 text-xs space-y-2">
             <div className="flex items-start gap-2.5">
-              <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+              <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 flex-shrink-0 mt-0.5" />
               <div>
-                <span className="font-semibold block text-rose-950 mb-0.5">
-                  OCR Engine Execution Error
+                <span className="font-mono font-bold uppercase tracking-wider block text-rose-950 dark:text-rose-100 mb-0.5">
+                  OCR ENGINE EXECUTION FAULT
                 </span>
-                <p className="text-rose-800 text-[11px] leading-relaxed">
+                <p className="text-rose-800 dark:text-rose-300 text-[11px] leading-relaxed">
                   {ocrError || 'Unable to initialize the OCR engine or extract text from this document image.'}
                 </p>
               </div>
             </div>
-          </div>
-
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/70 text-[11px] text-slate-600 space-y-1">
-            <span className="font-semibold text-slate-800 block">Troubleshooting Suggestions:</span>
-            <ul className="list-disc list-inside space-y-0.5 text-slate-600">
-              <li>Ensure you have active internet connectivity (required on first run to download language data).</li>
-              <li>Verify the image is in a supported raster format (JPEG, PNG, WebP) and not corrupted.</li>
-              <li>Try uploading a higher-contrast or differently oriented image.</li>
-            </ul>
           </div>
 
           <div className="pt-2 flex justify-end">
@@ -252,14 +245,14 @@ export const OCRAnalysisSection: React.FC<OCRAnalysisSectionProps> = ({
               type="button"
               disabled={disabled}
               onClick={onRetryOCR}
-              className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold shadow-xs transition-all cursor-pointer ${
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-mono font-bold uppercase tracking-wider shadow-xs transition-all cursor-pointer ${
                 disabled
-                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                  ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed'
                   : 'bg-rose-600 hover:bg-rose-700 text-white'
               }`}
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>Retry OCR Analysis</span>
+              <span>RETRY OCR PIPELINE</span>
             </button>
           </div>
         </div>
@@ -274,30 +267,31 @@ export const OCRAnalysisSection: React.FC<OCRAnalysisSectionProps> = ({
 
     return (
       <Card
-        title="Stage 02: Optical Character Recognition (OCR)"
-        subtitle={`Completed at ${ocrResult.extractedAt}`}
+        sectionCode="STAGE // 02"
+        title="Optical Character Recognition (OCR)"
+        subtitle={`Completed at ${ocrResult.extractedAt} • Neural LSTM Engine`}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 font-mono">
             {getConfidenceBadge(ocrResult.confidence, hasText)}
             <Badge variant="success" size="sm">
-              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-              <span>OCR Complete</span>
+              <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+              <span>OCR COMPLETE</span>
             </Badge>
           </div>
         }
       >
-        <div className="space-y-6">
+        <div className="space-y-6 font-sans">
           {/* EMPTY RESULT NOTICE */}
           {!hasText && (
-            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-2">
+            <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-900/60 text-amber-900 dark:text-amber-200 text-xs space-y-2">
               <div className="flex items-start gap-2.5">
-                <FileQuestion className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <FileQuestion className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-semibold block text-amber-950 mb-0.5">
-                    No Legible Text Detected
+                  <span className="font-mono font-bold uppercase tracking-wider block text-amber-950 dark:text-amber-100 mb-0.5">
+                    NO LEGIBLE CHARACTERS IDENTIFIED
                   </span>
-                  <p className="text-amber-800 text-[11px] leading-relaxed">
-                    The optical character recognition engine completed execution, but no readable characters were identified in this image. This commonly occurs with blank documents, severe motion blur, low lighting, or graphics without printed alphanumeric characters.
+                  <p className="text-amber-800 dark:text-amber-300 text-[11px] leading-relaxed">
+                    The optical character recognition engine completed execution, but no readable characters were identified in this raster.
                   </p>
                 </div>
               </div>
@@ -307,17 +301,17 @@ export const OCRAnalysisSection: React.FC<OCRAnalysisSectionProps> = ({
           {/* CANDIDATE FIELDS SECTION */}
           {hasText && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+              <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-800 font-mono">
                 <div className="flex items-center gap-2">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                    Candidate Structured Fields
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                    CANDIDATE STRUCTURED FIELDS
                   </h4>
-                  <Badge variant="neutral" size="sm">
-                    {candidateFields.length} Pattern Matches
-                  </Badge>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded font-mono">
+                    {candidateFields.length} MATCHES
+                  </span>
                 </div>
-                <span className="text-[11px] text-slate-400">
-                  Heuristic Parsing (Unauthenticated)
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                  HEURISTIC PARSING // UNVERIFIED
                 </span>
               </div>
 
@@ -326,12 +320,12 @@ export const OCRAnalysisSection: React.FC<OCRAnalysisSectionProps> = ({
                   {candidateFields.map((field) => (
                     <div
                       key={field.id}
-                      className="p-3 rounded-xl bg-slate-50/80 border border-slate-200/70 space-y-1.5 transition-colors hover:border-slate-300"
+                      className="p-3.5 rounded-lg bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 space-y-2 transition-colors hover:border-slate-300 dark:hover:border-slate-700"
                     >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 text-slate-600">
+                      <div className="flex items-center justify-between gap-2 font-mono">
+                        <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
                           {getCategoryIcon(field.category)}
-                          <span className="text-[11px] font-medium text-slate-500">
+                          <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-600 dark:text-slate-400">
                             {field.label}
                           </span>
                         </div>
@@ -339,41 +333,41 @@ export const OCRAnalysisSection: React.FC<OCRAnalysisSectionProps> = ({
                           <span
                             className={`text-[9px] uppercase font-mono px-1.5 py-0.5 rounded border font-semibold ${
                               field.confidenceTier === 'confident'
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80'
+                                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/80'
                                 : field.confidenceTier === 'review'
-                                ? 'bg-amber-50 text-amber-700 border-amber-200/80'
-                                : 'bg-slate-100 text-slate-600 border-slate-200/80'
+                                ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200/80 dark:border-amber-800/80'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200/80 dark:border-slate-700'
                             }`}
                           >
                             {field.confidenceTier === 'confident'
-                              ? 'Name Detected'
+                              ? 'CONFIDENT'
                               : field.confidenceTier === 'review'
-                              ? 'Requires Review'
-                              : 'Not Confident'}
+                              ? 'REQUIRES REVIEW'
+                              : 'UNCERTAIN'}
                           </span>
                         ) : (
-                          <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-slate-200/70 text-slate-600">
+                          <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-slate-200/70 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                             {field.category}
                           </span>
                         )}
                       </div>
 
                       <div
-                        className={`font-mono text-xs font-semibold break-all bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/50 ${
+                        className={`font-mono text-xs font-bold break-all bg-white dark:bg-slate-900 px-3 py-2 rounded border border-slate-200/60 dark:border-slate-800 ${
                           field.value === 'Name not confidently detected'
-                            ? 'text-slate-500 italic font-normal'
-                            : 'text-slate-900'
+                            ? 'text-slate-500 dark:text-slate-400 italic font-normal'
+                            : 'text-slate-900 dark:text-slate-100'
                         }`}
                       >
                         {field.value}
                       </div>
 
-                      <p className="text-[10px] text-slate-400 font-mono">
-                        Rule: {field.patternMatched}
-                      </p>
+                      <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 dark:text-slate-500">
+                        <span>RULE // {field.patternMatched}</span>
+                      </div>
 
                       {field.contextNote && (
-                        <p className="text-[10px] text-amber-700/90 bg-amber-50/50 px-2 py-1 rounded border border-amber-200/40">
+                        <p className="text-[10px] font-mono text-amber-800 dark:text-amber-300 bg-amber-500/10 dark:bg-amber-950/40 px-2 py-1 rounded border border-amber-500/20">
                           {field.contextNote}
                         </p>
                       )}
@@ -381,23 +375,24 @@ export const OCRAnalysisSection: React.FC<OCRAnalysisSectionProps> = ({
                   ))}
                 </div>
               ) : (
-                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/60 text-center text-xs text-slate-500">
-                  No standard identity fields (IDs, dates, MRZ) matched the recognized text patterns. See raw output below.
+                <div className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200/60 dark:border-slate-800 text-center text-xs font-mono text-slate-500 dark:text-slate-400">
+                  NO STANDARD FIELD PATTERNS (IDS, DATES, MRZ) MATCHED THE OCR STREAM. SEE RAW GLYPHS BELOW.
                 </div>
               )}
             </div>
           )}
 
-          {/* RAW OCR TEXT OUTPUT SECTION */}
+          {/* RAW OCR TEXT OUTPUT TERMINAL */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between font-mono">
               <div className="flex items-center gap-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Raw OCR Output
+                <Terminal className="w-3.5 h-3.5 text-orange-500" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                  RAW OCR OUTPUT STREAM
                 </h4>
                 {hasText && (
-                  <span className="text-[11px] font-mono text-slate-400">
-                    ({ocrResult.lines.length} lines detected)
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                    ({ocrResult.lines.length} LINES DETECTED)
                   </span>
                 )}
               </div>
@@ -406,17 +401,17 @@ export const OCRAnalysisSection: React.FC<OCRAnalysisSectionProps> = ({
                 <button
                   type="button"
                   onClick={() => handleCopyText(ocrResult.rawText)}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-slate-100 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 transition-colors cursor-pointer"
                 >
                   {copied ? (
                     <>
-                      <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      <span className="text-emerald-700">Copied</span>
+                      <Check className="w-3.5 h-3.5 text-emerald-500" />
+                      <span className="text-emerald-600 dark:text-emerald-400">COPIED</span>
                     </>
                   ) : (
                     <>
-                      <Copy className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Copy Text</span>
+                      <Copy className="w-3.5 h-3.5 text-slate-400" />
+                      <span>COPY STREAM</span>
                     </>
                   )}
                 </button>
@@ -424,43 +419,27 @@ export const OCRAnalysisSection: React.FC<OCRAnalysisSectionProps> = ({
             </div>
 
             {hasText ? (
-              <pre className="p-4 rounded-xl bg-slate-900 text-slate-100 font-mono text-xs overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-64 border border-slate-800 shadow-inner selection:bg-blue-600 selection:text-white">
+              <pre className="p-4 rounded-lg bg-slate-950 text-slate-200 font-mono text-xs overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-64 border border-slate-800 shadow-inner selection:bg-orange-600 selection:text-white">
                 {ocrResult.rawText}
               </pre>
             ) : (
-              <div className="p-4 rounded-xl bg-slate-100 text-slate-400 font-mono text-xs italic text-center">
-                [Empty text buffer - no characters recognized]
+              <div className="p-4 rounded-lg bg-slate-100 dark:bg-slate-900 text-slate-400 dark:text-slate-500 font-mono text-xs italic text-center">
+                [EMPTY TEXT BUFFER — NO CHARACTERS RECOGNIZED]
               </div>
             )}
           </div>
 
-          {/* TRANSPARENT EVALUATION DISCLAIMER (AUDIT POINTS 7 & 8) */}
-          <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/70 text-[11px] text-slate-600 flex items-start gap-2.5">
-            <ShieldAlert className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+          {/* TRANSPARENT EVALUATION DISCLAIMER */}
+          <div className="p-3 bg-slate-50 dark:bg-slate-950/60 rounded-lg border border-slate-200/70 dark:border-slate-800 text-[11px] font-mono text-slate-600 dark:text-slate-400 flex items-start gap-2.5">
+            <ShieldAlert className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
             <div className="space-y-1">
-              <p>
-                <strong>Evaluation Transparency:</strong> OCR extracts and transcribes visible alphanumeric characters from the document raster. It does not classify this document as genuine or fake, nor does it prove authenticity. Digital tampering detection (Error Level Analysis), copy-move forgery detection, and biometric facial matching are not performed in Phase 3.
+              <span className="font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100 block">
+                AUDIT LOG SPECIFICATION:
+              </span>
+              <p className="leading-relaxed">
+                Candidate field parsing applies deterministic regex heuristics to OCR text tokens. Extracted identity fields must be reviewed against official documentation before any institutional determination.
               </p>
-              <div className="flex items-center gap-1.5 text-slate-500 pt-0.5">
-                <Layers className="w-3 h-3 text-slate-400" />
-                <span>Forensic tampering checks (Phase 4) and biometric facial matching (Phase 5) remain scheduled.</span>
-              </div>
             </div>
-          </div>
-
-          {/* ACTION BAR: RE-RUN OCR */}
-          <div className="pt-2 flex justify-end">
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={onRunOCR}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer ${
-                disabled ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-              <span>Re-run OCR Analysis</span>
-            </button>
           </div>
         </div>
       </Card>

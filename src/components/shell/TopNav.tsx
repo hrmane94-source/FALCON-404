@@ -1,6 +1,7 @@
 import React from 'react'
-import { Menu, Plus } from 'lucide-react'
+import { Menu, ChevronRight, Scan } from 'lucide-react'
 import type { NavigationSection } from '../../types'
+import { ThemeSelector } from '../common/ThemeSelector'
 
 export interface TopNavProps {
   currentSection: NavigationSection
@@ -13,57 +14,66 @@ export const TopNav: React.FC<TopNavProps> = ({
   onNavigate,
   onToggleSidebar
 }) => {
-  const getSectionTitle = (section: NavigationSection) => {
+  const getSectionMetadata = (section: NavigationSection) => {
     switch (section) {
       case 'overview':
-        return 'Overview'
+        return { title: 'Overview', code: 'SYS-OVERVIEW' }
       case 'new-verification':
-        return 'New Verification'
+        return { title: 'New Verification', code: 'INTAKE-SCREEN' }
       case 'case-history':
-        return 'Case History'
+        return { title: 'Case History', code: 'ARCHIVE-LOG' }
       case 'reports':
-        return 'Reports'
+        return { title: 'Audit Reports', code: 'REPORT-GEN' }
       case 'settings':
-        return 'Settings'
+        return { title: 'Platform Settings', code: 'CFG-CONSOLE' }
       default:
-        return 'Screening Portal'
+        return { title: 'Screening Portal', code: 'TERMINAL' }
     }
   }
 
+  const { title, code } = getSectionMetadata(currentSection)
+
   return (
-    <header className="sticky top-0 z-30 bg-white border-b border-slate-200/80 h-16 flex items-center px-4 sm:px-8 justify-between">
-      {/* Left: Mobile menu & current section title */}
+    <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#090d16]/95 backdrop-blur-md border-b border-slate-200/90 dark:border-slate-800/90 h-16 flex items-center px-4 sm:px-8 justify-between transition-colors">
+      {/* Left: Mobile trigger & Technical Breadcrumb Hierarchy */}
       <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={onToggleSidebar}
-          className="p-1.5 -ml-1 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 lg:hidden cursor-pointer"
+          className="p-1.5 -ml-1 rounded-md text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden cursor-pointer"
           aria-label="Toggle navigation menu"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <h2 className="text-base font-semibold text-slate-900 tracking-tight">
-          {getSectionTitle(currentSection)}
-        </h2>
+        <div className="flex items-center gap-2 text-xs">
+          <span className="font-mono text-[11px] text-slate-400 dark:text-slate-500 hidden sm:inline">
+            FALCON //
+          </span>
+          <span className="font-mono text-[10px] tracking-wider uppercase text-blue-600 dark:text-blue-400 font-semibold bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded border border-blue-200/50 dark:border-blue-900/50 hidden md:inline">
+            {code}
+          </span>
+          <ChevronRight className="w-3.5 h-3.5 text-slate-300 dark:text-slate-700 hidden sm:inline" />
+          <h1 className="font-heading text-base font-bold text-slate-950 dark:text-slate-50 tracking-tight">
+            {title}
+          </h1>
+        </div>
       </div>
 
-      {/* Right: Unobtrusive prototype status & primary action */}
+      {/* Right: Technical Controls (Theme Selector + Primary Screening CTA) */}
       <div className="flex items-center gap-3">
-        {/* Subtle prototype indicator */}
-        <span className="hidden sm:inline-flex items-center px-2.5 py-1 rounded-md text-xs font-normal text-slate-500 bg-slate-100 border border-slate-200/60">
-          Prototype Phase
-        </span>
+        {/* Working Theme Selector */}
+        <ThemeSelector />
 
         {/* Primary Action Button */}
         {currentSection !== 'new-verification' && (
           <button
             type="button"
             onClick={() => onNavigate('new-verification')}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-medium transition-colors cursor-pointer shadow-xs"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-500 text-white rounded-lg text-xs font-semibold font-sans transition-all cursor-pointer shadow-xs"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Start Verification</span>
+            <Scan className="w-3.5 h-3.5" />
+            <span>New Verification</span>
           </button>
         )}
       </div>

@@ -5,13 +5,15 @@ export interface BadgeProps {
   variant?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'accent' | 'subtle' | 'neutral'
   size?: 'sm' | 'md'
   className?: string
+  title?: string
 }
 
 export const Badge: React.FC<BadgeProps> = ({
   children,
   variant = 'default',
   size = 'sm',
-  className = ''
+  className = '',
+  title
 }) => {
   const sizeClasses = size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-xs'
 
@@ -28,6 +30,7 @@ export const Badge: React.FC<BadgeProps> = ({
 
   return (
     <span
+      title={title}
       className={`inline-flex items-center gap-1.5 rounded-md font-medium text-[11px] leading-tight ${sizeClasses} ${variantClasses} ${className}`}
     >
       {children}

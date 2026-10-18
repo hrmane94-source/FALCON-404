@@ -48,3 +48,30 @@ export interface UploadedDocument {
   dimensions?: { width: number; height: number }
   uploadedAt: string
 }
+
+export type CandidateCategory = 'document-type' | 'identifier' | 'date' | 'name' | 'mrz'
+
+export interface CandidateField {
+  id: string
+  label: string
+  value: string
+  patternMatched: string
+  category: CandidateCategory
+}
+
+export type OCRStatus = 'idle' | 'initializing' | 'recognizing' | 'success' | 'error'
+
+export interface OCRProgress {
+  status: string
+  progress: number // 0 to 1
+  stage?: 'initializing' | 'recognizing' | 'complete'
+}
+
+export interface OCRResult {
+  rawText: string
+  confidence: number // 0 to 100
+  lines: string[]
+  candidateFields: CandidateField[]
+  extractedAt: string
+}
+

@@ -23,18 +23,18 @@ export const SYSTEM_STATUS_COMPONENTS: SystemComponentStatus[] = [
     id: 'ocr-engine',
     name: 'OCR Engine',
     category: 'ai-engine',
-    status: 'not-integrated',
-    description: 'Text parsing and format validation scheduled for Phase 2.',
-    phase: 'Phase 2',
-    techDetails: 'OCR / MRZ Parser'
+    status: 'available',
+    description: 'Client-side WebAssembly optical recognition active for synthetic document review.',
+    phase: 'Phase 3',
+    techDetails: 'Tesseract.js v7'
   },
   {
     id: 'forensic-engine',
     name: 'Forensic Analysis',
     category: 'ai-engine',
     status: 'not-integrated',
-    description: 'Image alteration and tamper analysis scheduled for Phase 3.',
-    phase: 'Phase 3',
+    description: 'Image alteration and tamper analysis scheduled for Phase 4.',
+    phase: 'Phase 4',
     techDetails: 'Forensics Pipeline'
   },
   {
@@ -42,8 +42,8 @@ export const SYSTEM_STATUS_COMPONENTS: SystemComponentStatus[] = [
     name: 'Face Verification',
     category: 'ai-engine',
     status: 'not-integrated',
-    description: 'Facial comparison models scheduled for Phase 3.',
-    phase: 'Phase 3',
+    description: 'Facial comparison models scheduled for Phase 5.',
+    phase: 'Phase 5',
     techDetails: 'Biometric Matching'
   }
 ]

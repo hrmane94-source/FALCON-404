@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   Check,
   ArrowRight,
@@ -10,7 +10,8 @@ import {
   Loader2,
   AlertTriangle,
   Sparkles,
-  ShieldCheck
+  ShieldCheck,
+  CheckCircle2
 } from 'lucide-react'
 import type {
   NavigationSection,
@@ -24,7 +25,8 @@ import type {
   ImageIntegrityResult,
   LayoutAnalysisStatus,
   LayoutProgress,
-  DocumentLayoutResult
+  DocumentLayoutResult,
+  ScreeningReportData
 } from '../types'
 import { Card } from '../components/common/Card'
 import { Badge } from '../components/common/Badge'
@@ -38,15 +40,27 @@ import { performOCR } from '../services/ocrService'
 import { performImageIntegrityAnalysis } from '../services/imageIntegrityService'
 import { performDocumentLayoutAnalysis } from '../services/documentLayoutService'
 import { PROJECT_BRANDING } from '../constants/branding'
+import { useCases } from '../context/CaseContext'
+import { buildSavedCaseRecord } from '../services/caseStorageService'
 
 export interface NewVerificationPageProps {
   onNavigate: (section: NavigationSection) => void
 }
 
+const generateCaseReference = () =>
+  `FLC-${Math.random().toString(36).substring(2, 8).toUpperCase()}-${Date.now().toString().slice(-4)}`
+
 export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavigate }) => {
+  const { saveCase, stationId } = useCases()
   const [currentStep, setCurrentStep] = useState<'upload' | 'review'>('upload')
   const [selectedDocType, setSelectedDocType] = useState<DocumentType>('National ID')
   const [uploadedDoc, setUploadedDoc] = useState<UploadedDocument | null>(null)
+
+  // Unique screening session & case reference
+  const [caseReference, setCaseReference] = useState<string>(() => generateCaseReference())
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [autoSaveError, setAutoSaveError] = useState<string | null>(null)
+  const savedSessionRef = useRef<string | null>(null)
 
   // Stage 02: OCR state
   const [ocrStatus, setOcrStatus] = useState<OCRStatus>('idle')
@@ -88,10 +102,14 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
     setLayoutProgress(null)
     setLayoutResult(null)
     setLayoutError(null)
+    setAutoSaveStatus('idle')
+    setAutoSaveError(null)
+    savedSessionRef.current = null
   }
 
   const handleDocumentSelected = (doc: UploadedDocument) => {
     resetAnalysisState()
+    setCaseReference(generateCaseReference())
     setUploadedDoc(doc)
   }
 
@@ -105,6 +123,7 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
       URL.revokeObjectURL(uploadedDoc.previewUrl)
     }
     resetAnalysisState()
+    setCaseReference(generateCaseReference())
     setUploadedDoc(null)
     setCurrentStep('upload')
   }
@@ -211,14 +230,73 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
     }
   }
 
+  const executeAutoSave = async (
+    activeOcr: OCRResult | null,
+    activeIntegrity: ImageIntegrityResult,
+    activeLayout: DocumentLayoutResult | null
+  ) => {
+    // Idempotency: prevent saving twice for the exact same session reference
+    if (savedSessionRef.current === caseReference) {
+      return
+    }
+
+    try {
+      setAutoSaveStatus('saving')
+      setAutoSaveError(null)
+
+      const detectedDocTypeField = activeOcr?.candidateFields.find((f) => f.category === 'document-type')
+      const reportData: ScreeningReportData = {
+        reportId: caseReference,
+        generatedAt: new Date().toLocaleString(),
+        documentName: uploadedDoc?.name || 'document',
+        selectedDocumentType: selectedDocType,
+        detectedDocumentType: detectedDocTypeField?.value,
+        ocrStatus: activeOcr ? 'success' : ocrStatus,
+        ocrConfidence: activeOcr?.confidence,
+        ocrResult: activeOcr || undefined,
+        integrityResult: activeIntegrity,
+        layoutResult: activeLayout || undefined,
+        privacySettings: {
+          includeFullOCR: false,
+          includeIdentifiableFields: false
+        }
+      }
+
+      const record = buildSavedCaseRecord(reportData, stationId)
+      const success = await saveCase(record)
+
+      if (success) {
+        savedSessionRef.current = caseReference
+        setAutoSaveStatus('saved')
+        setAutoSaveError(null)
+      } else {
+        setAutoSaveStatus('error')
+        setAutoSaveError('Failed to persist case to local IndexedDB store.')
+      }
+    } catch (err: any) {
+      console.error('Failed to auto-save case record:', err)
+      setAutoSaveStatus('error')
+      setAutoSaveError(err?.message || 'Error occurred while saving case record.')
+    }
+  }
+
+  const handleRetryAutoSave = async () => {
+    if (!integrityResult) return
+    await executeAutoSave(ocrResult, integrityResult, layoutResult)
+  }
+
   const handleRunCompleteScreening = async () => {
     if (!uploadedDoc?.file) return
     let currentOcr = ocrResult
     if (ocrStatus !== 'success') {
       currentOcr = await handleRunOCR()
     }
-    await handleRunIntegrity()
-    await handleRunLayout(currentOcr)
+    const currentIntegrity = await handleRunIntegrity()
+    const currentLayout = await handleRunLayout(currentOcr)
+
+    if (currentIntegrity) {
+      await executeAutoSave(currentOcr, currentIntegrity, currentLayout)
+    }
   }
 
   const isOcrRunning = ocrStatus === 'initializing' || ocrStatus === 'recognizing'
@@ -277,9 +355,14 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
       return {
         icon: <FileCheck2 className="w-5 h-5 text-emerald-500" />,
         iconBg: 'bg-emerald-500/10 border-emerald-500/30',
-        title: 'COMPLETE SCREENING FINALIZED // DOSSIER READY',
+        title:
+          autoSaveStatus === 'saved'
+            ? 'COMPLETE SCREENING FINALIZED // CASE SAVED LOCALLY'
+            : 'COMPLETE SCREENING FINALIZED // DOSSIER READY',
         subtitle:
-          'Client-side OCR transcription, image integrity checks, and document boundary/perspective analysis are complete. Review audit findings below.'
+          autoSaveStatus === 'saved'
+            ? `Screening completed and case saved locally. (Dossier Ref: ${caseReference})`
+            : 'Client-side OCR transcription, image integrity checks, and document boundary/perspective analysis are complete. Review audit findings below.'
       }
     }
     if (integrityResult && ocrResult) {
@@ -666,6 +749,55 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
             onRetryAnalysis={() => handleRunLayout()}
           />
 
+          {/* AUTO-SAVE CONFIRMATION & NOTIFICATION BANNER */}
+          {autoSaveStatus === 'saved' && (
+            <div className="p-4 rounded-xl bg-emerald-500/10 dark:bg-emerald-950/40 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono text-xs text-emerald-900 dark:text-emerald-200 animate-in fade-in">
+              <div className="flex items-center gap-2.5">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                <div>
+                  <span className="font-bold text-slate-900 dark:text-slate-100 block">
+                    Screening completed and case saved locally.
+                  </span>
+                  <span className="text-[11px] text-emerald-700 dark:text-emerald-300 font-sans">
+                    Dossier Reference: <strong className="font-mono">{caseReference}</strong> • Stored in browser IndexedDB
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onNavigate('case-history')}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold uppercase tracking-wider text-[11px] transition-colors cursor-pointer self-start sm:self-auto"
+              >
+                <span>VIEW IN AUDIT LEDGER</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {autoSaveStatus === 'error' && (
+            <div className="p-4 rounded-xl bg-red-500/10 dark:bg-red-950/40 border border-red-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono text-xs text-red-900 dark:text-red-200 animate-in fade-in">
+              <div className="flex items-center gap-2.5">
+                <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                <div>
+                  <span className="font-bold block">
+                    Screening completed, but local save failed. Results are preserved in memory.
+                  </span>
+                  <span className="text-[11px] text-red-700 dark:text-red-300 font-sans">
+                    {autoSaveError || 'Failed to persist dossier to local IndexedDB.'}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleRetryAutoSave}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded font-bold uppercase tracking-wider text-[11px] transition-colors cursor-pointer self-start sm:self-auto"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>RETRY SAVE</span>
+              </button>
+            </div>
+          )}
+
           {/* PRELIMINARY SCREENING REPORT DOSSIER */}
           {integrityResult && (
             <ScreeningReportSection
@@ -676,6 +808,10 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
               integrityResult={integrityResult}
               layoutResult={layoutResult}
               disabled={isProcessing}
+              reportId={caseReference}
+              autoSaveStatus={autoSaveStatus}
+              autoSaveError={autoSaveError}
+              onRetryAutoSave={handleRetryAutoSave}
             />
           )}
 

@@ -1,12 +1,66 @@
-import React from 'react'
-import { Sun, Moon, Laptop } from 'lucide-react'
+import React, { useState } from 'react'
+import {
+  Sun,
+  Moon,
+  Laptop,
+  Database,
+  Trash2,
+  Download,
+  RefreshCw,
+  AlertTriangle,
+  CheckCircle2,
+  ShieldCheck
+} from 'lucide-react'
 import { Card } from '../components/common/Card'
 import { Badge } from '../components/common/Badge'
+import { Modal } from '../components/common/Modal'
 import { useTheme, type Theme } from '../context/ThemeContext'
+import { useCases } from '../context/CaseContext'
+import { exportConsolidatedAuditLedger } from '../utils/savedCaseExport'
 import { PROJECT_BRANDING } from '../constants/branding'
 
 export const SettingsPage: React.FC = () => {
   const { theme, setTheme } = useTheme()
+  const { cases, storageStats, stationId, setStationId, clearAllCases, refreshStats } = useCases()
+
+  const [inputStationId, setInputStationId] = useState(stationId)
+  const [stationSavedNotice, setStationSavedNotice] = useState(false)
+  const [showPurgeModal, setShowPurgeModal] = useState(false)
+  const [isPurging, setIsPurging] = useState(false)
+  const [purgeSuccessNotice, setPurgeSuccessNotice] = useState(false)
+  const [isRefreshingStats, setIsRefreshingStats] = useState(false)
+
+  const handleStationIdSave = (e: React.FormEvent) => {
+    e.preventDefault()
+    setStationId(inputStationId)
+    setStationSavedNotice(true)
+    setTimeout(() => setStationSavedNotice(false), 3000)
+  }
+
+  const handleRefreshStats = async () => {
+    setIsRefreshingStats(true)
+    await refreshStats()
+    setTimeout(() => setIsRefreshingStats(false), 500)
+  }
+
+  const handlePurgeAllConfirm = async () => {
+    try {
+      setIsPurging(true)
+      await clearAllCases()
+      setShowPurgeModal(false)
+      setPurgeSuccessNotice(true)
+      setTimeout(() => setPurgeSuccessNotice(false), 4000)
+    } catch (err) {
+      console.error('Failed to purge database:', err)
+    } finally {
+      setIsPurging(false)
+    }
+  }
+
+  const handleExportArchive = () => {
+    if (cases.length === 0) return
+    exportConsolidatedAuditLedger(cases)
+  }
 
   const themeOptions: {
     id: Theme
@@ -52,18 +106,164 @@ export const SettingsPage: React.FC = () => {
             </Badge>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-sans">
-            Interface preferences, platform configurations, and screening sensitivity thresholds.
+            Interface preferences, local storage telemetry, station identifiers, and audit ledger maintenance.
           </p>
         </div>
 
         <div className="text-[10px] font-mono text-slate-400 uppercase tracking-widest bg-slate-100 dark:bg-slate-900 px-2.5 py-1 rounded border border-slate-200 dark:border-slate-800 self-start sm:self-auto">
-          SYSTEM CALIBRATION // NOMINAL
+          CALIBRATION // NOMINAL
         </div>
       </div>
 
+      {/* Station Identifier Configuration */}
+      <Card
+        sectionCode="STATION // 01"
+        title="Examiner &amp; Station Identification"
+        subtitle="Configures the audit station stamp attached to screening dossiers recorded from this browser profile."
+      >
+        <form onSubmit={handleStationIdSave} className="space-y-3 font-mono text-xs">
+          <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                placeholder="E.G. STATION-01, MOBILE-TERMINAL, BORDER-DESK-4"
+                value={inputStationId}
+                onChange={(e) => setInputStationId(e.target.value)}
+                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-orange-500 uppercase tracking-wider font-mono font-bold"
+              />
+            </div>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded font-bold uppercase tracking-wider transition-colors cursor-pointer whitespace-nowrap"
+            >
+              UPDATE STATION ID
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+            <span>
+              Currently Active Identifier:{' '}
+              <strong className="text-slate-800 dark:text-slate-200">{stationId || 'DEFAULT (STATION-01)'}</strong>
+            </span>
+            {stationSavedNotice && (
+              <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 animate-in fade-in">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>SAVED TO LOCAL PROFILE</span>
+              </span>
+            )}
+          </div>
+        </form>
+      </Card>
+
+      {/* Local Storage Telemetry & Maintenance */}
+      <Card
+        sectionCode="STORAGE // 02"
+        title="Local Database &amp; Audit Ledger Maintenance"
+        subtitle="Manage client-side IndexedDB storage (`falcon_cases_db`), review storage footprint, and maintain dossiers."
+        action={
+          <button
+            type="button"
+            onClick={handleRefreshStats}
+            className="inline-flex items-center gap-1 text-[11px] font-mono text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-colors cursor-pointer"
+          >
+            <RefreshCw className={`w-3 h-3 ${isRefreshingStats ? 'animate-spin' : ''}`} />
+            <span>REFRESH</span>
+          </button>
+        }
+      >
+        <div className="space-y-4 font-mono text-xs">
+          {/* Storage Telemetry Specs */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3 rounded bg-slate-50 dark:bg-slate-950 border border-slate-200/70 dark:border-slate-800">
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 block">DATABASE STATUS</span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400 block mt-0.5 flex items-center gap-1">
+                <Database className="w-3 h-3" />
+                <span>CONNECTED</span>
+              </span>
+              <span className="text-[10px] text-slate-400 block mt-0.5">falcon_cases_db (v1)</span>
+            </div>
+
+            <div className="p-3 rounded bg-slate-50 dark:bg-slate-950 border border-slate-200/70 dark:border-slate-800">
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 block">ARCHIVED DOSSIERS</span>
+              <span className="font-bold text-slate-900 dark:text-slate-100 block mt-0.5 text-base">
+                {storageStats?.recordCount ?? cases.length}
+              </span>
+              <span className="text-[10px] text-slate-400 block mt-0.5">Persistent records</span>
+            </div>
+
+            <div className="p-3 rounded bg-slate-50 dark:bg-slate-950 border border-slate-200/70 dark:border-slate-800">
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 block">EST. STORAGE USED</span>
+              <span className="font-bold text-slate-900 dark:text-slate-100 block mt-0.5 text-base">
+                {storageStats?.estimatedStorageFormatted ?? '0 KB'}
+              </span>
+              <span className="text-[10px] text-slate-400 block mt-0.5">Telemetry &amp; metrics only</span>
+            </div>
+
+            <div className="p-3 rounded bg-slate-50 dark:bg-slate-950 border border-slate-200/70 dark:border-slate-800">
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 block">IMAGE BITMAP USAGE</span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400 block mt-0.5 flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3" />
+                <span>0 KB (NEVER SAVED)</span>
+              </span>
+              <span className="text-[10px] text-slate-400 block mt-0.5">Strict privacy boundary</span>
+            </div>
+          </div>
+
+          {/* Privacy Guarantee Banner */}
+          <div className="p-3 rounded bg-orange-50/50 dark:bg-orange-950/30 border border-orange-200/60 dark:border-orange-800/60 text-[11px] text-orange-950 dark:text-orange-200 font-sans leading-relaxed">
+            <strong>Client-Side Storage Guarantee:</strong> FALCON-404 never stores raw unparsed OCR text buffers, original image pixel bitmaps, or unmasked government identifiers in persistent storage. All data resides solely inside your current browser profile in IndexedDB and is never sent to external servers.
+          </div>
+
+          {/* Maintenance Actions */}
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+            {purgeSuccessNotice ? (
+              <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 animate-in fade-in">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>AUDIT LEDGER SUCCESSFULLY PURGED</span>
+              </span>
+            ) : (
+              <span className="text-[10px] text-slate-400 uppercase tracking-wider">
+                ACTIONS APPLY EXCLUSIVELY TO THIS BROWSER PROFILE
+              </span>
+            )}
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={cases.length === 0}
+                onClick={handleExportArchive}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded text-xs font-bold uppercase tracking-wider border transition-colors ${
+                  cases.length === 0
+                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700 cursor-not-allowed'
+                    : 'bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-300 dark:border-slate-700 cursor-pointer shadow-2xs'
+                }`}
+                title="Export all saved cases as a single consolidated JSON archive"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-500" />
+                <span>EXPORT ARCHIVE ({cases.length})</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={cases.length === 0}
+                onClick={() => setShowPurgeModal(true)}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded text-xs font-bold uppercase tracking-wider border transition-colors ${
+                  cases.length === 0
+                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border-slate-200 dark:border-slate-700 cursor-not-allowed'
+                    : 'bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/40 text-red-700 dark:text-red-300 border-red-200 dark:border-red-900/60 cursor-pointer'
+                }`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>PURGE AUDIT LEDGER</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </Card>
+
       {/* Appearance & Theme Selector */}
       <Card
-        sectionCode="PREF // 01"
+        sectionCode="PREF // 03"
         title="Display Calibration &amp; Theme Engine"
         subtitle="Select your preferred optical presentation mode for document forensics."
       >
@@ -202,6 +402,47 @@ export const SettingsPage: React.FC = () => {
           {PROJECT_BRANDING.challengeName} // GEN 2
         </span>
       </div>
+
+      {/* Purge All Confirmation Modal */}
+      <Modal
+        isOpen={showPurgeModal}
+        onClose={() => setShowPurgeModal(false)}
+        title="PURGE COMPLETE AUDIT DATABASE"
+        maxWidth="sm"
+      >
+        <div className="space-y-4 font-mono text-xs">
+          <div className="flex items-start gap-3 p-3 bg-red-50 dark:bg-red-950/40 rounded border border-red-200 dark:border-red-900/60 text-red-900 dark:text-red-200">
+            <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <div className="space-y-1 font-sans">
+              <strong className="font-mono text-xs font-bold block text-red-950 dark:text-red-100 uppercase">
+                CRITICAL: PURGE ALL RECORDS
+              </strong>
+              <p className="text-[11px] leading-relaxed">
+                Permanently purge all <strong>{cases.length} saved case dossiers</strong> from your local browser IndexedDB storage? All compliance records, raster telemetry, and audit logs will be permanently deleted.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button
+              type="button"
+              disabled={isPurging}
+              onClick={() => setShowPurgeModal(false)}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded font-bold uppercase tracking-wider cursor-pointer transition-colors"
+            >
+              CANCEL
+            </button>
+            <button
+              type="button"
+              disabled={isPurging}
+              onClick={handlePurgeAllConfirm}
+              className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded font-bold uppercase tracking-wider cursor-pointer shadow-xs transition-colors"
+            >
+              {isPurging ? 'PURGING ALL...' : 'CONFIRM PURGE ALL'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

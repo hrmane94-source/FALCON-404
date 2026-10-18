@@ -10,14 +10,16 @@ import { Modal } from '../components/common/Modal'
 import { EmptyState } from '../components/common/EmptyState'
 import { DEMO_CASE_RECORDS } from '../data/mockCases'
 import { PROJECT_BRANDING } from '../constants/branding'
+import { useCases } from '../context/CaseContext'
 
 export interface OverviewPageProps {
   onNavigate: (section: NavigationSection) => void
 }
 
 export const OverviewPage: React.FC<OverviewPageProps> = ({ onNavigate }) => {
+  const { cases } = useCases()
   const [selectedCase, setSelectedCase] = useState<MockCaseRecord | null>(null)
-  const [showDemoRecords, setShowDemoRecords] = useState(true)
+  const [showDemoRecords, setShowDemoRecords] = useState(false)
 
   return (
     <div className="space-y-7">
@@ -105,18 +107,95 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({ onNavigate }) => {
         <Card
           sectionCode="HIST // 01"
           title="Recent Screening Log"
-          subtitle="Verification audit trail and demonstrator case outcomes."
+          subtitle={
+            cases.length > 0 && !showDemoRecords
+              ? `Live in-browser audit ledger (${cases.length} records archived) • ${PROJECT_BRANDING.developerAttribution}`
+              : 'Demonstrator specimen records for evaluation and test workflows.'
+          }
           action={
-            <button
-              type="button"
-              onClick={() => setShowDemoRecords(!showDemoRecords)}
-              className="text-xs font-mono text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-colors cursor-pointer"
-            >
-              [{showDemoRecords ? 'EMPTY_STATE' : 'LOAD_RECORDS'}]
-            </button>
+            <div className="flex items-center gap-2 font-mono text-xs">
+              {cases.length > 0 && (
+                <Badge variant={!showDemoRecords ? 'success' : 'neutral'} size="sm">
+                  {!showDemoRecords ? 'LIVE AUDIT LEDGER' : 'DEMO SPECIMENS'}
+                </Badge>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowDemoRecords(!showDemoRecords)}
+                className="text-xs font-mono text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-colors cursor-pointer uppercase tracking-wider"
+              >
+                [{showDemoRecords ? 'LIVE_CASES' : 'DEMO_SPECIMENS'}]
+              </button>
+            </div>
           }
         >
-          {showDemoRecords ? (
+          {cases.length > 0 && !showDemoRecords ? (
+            <div className="overflow-x-auto -mx-6 px-6">
+              <table className="w-full text-left text-xs border-collapse font-sans">
+                <thead>
+                  <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] font-mono uppercase tracking-wider text-slate-400">
+                    <th className="pb-3 font-semibold">CASE REF</th>
+                    <th className="pb-3 font-semibold">DOCUMENT SPEC</th>
+                    <th className="pb-3 font-semibold">MASKED CANDIDATE</th>
+                    <th className="pb-3 font-semibold">ARCHIVED DATE</th>
+                    <th className="pb-3 font-semibold">TRIAGE STATUS</th>
+                    <th className="pb-3 font-semibold text-right">ACTION</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono">
+                  {cases.slice(0, 5).map((item) => {
+                    const nameField = item.candidateFields.find((f) => f.category === 'name')
+                    return (
+                      <tr key={item.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="py-3 font-mono text-xs font-bold text-slate-900 dark:text-slate-100">
+                          {item.id}
+                        </td>
+                        <td className="py-3 text-slate-800 dark:text-slate-200 font-medium font-sans">
+                          {item.documentCategory}
+                          <span className="block text-[10px] font-mono text-slate-400 dark:text-slate-500 font-normal">
+                            {item.fileFormat} • {item.fileSizeFormatted}
+                          </span>
+                        </td>
+                        <td className="py-3 font-mono text-slate-600 dark:text-slate-400 text-xs">
+                          {nameField?.value || 'ANONYMIZED'}
+                        </td>
+                        <td className="py-3 font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                          {item.savedAt}
+                        </td>
+                        <td className="py-3">
+                          {item.assessment.priority === 'standard' && (
+                            <Badge variant="success" size="sm">
+                              STANDARD
+                            </Badge>
+                          )}
+                          {item.assessment.priority === 'manual-review' && (
+                            <Badge variant="warning" size="sm">
+                              MANUAL REVIEW
+                            </Badge>
+                          )}
+                          {item.assessment.priority === 'inconclusive' && (
+                            <Badge variant="neutral" size="sm">
+                              INCONCLUSIVE
+                            </Badge>
+                          )}
+                        </td>
+                        <td className="py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => onNavigate('case-history')}
+                            className="inline-flex items-center gap-1 text-[11px] font-mono text-orange-600 hover:text-orange-700 dark:text-orange-400 font-bold transition-colors cursor-pointer uppercase tracking-wider"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>VIEW DOSSIER</span>
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : DEMO_CASE_RECORDS.length > 0 && showDemoRecords ? (
             <div className="overflow-x-auto -mx-6 px-6">
               <table className="w-full text-left text-xs border-collapse font-sans">
                 <thead>
@@ -181,15 +260,15 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({ onNavigate }) => {
             </div>
           ) : (
             <EmptyState
-              title="No Screening Cases Found"
-              description="Screening queue is empty. Initialize a new document verification intake."
+              title="NO SCREENING CASES IN LOCAL LEDGER"
+              description="No documents have been screened and archived yet in your current browser profile. Launch a new verification intake to create your first case."
               action={
                 <button
                   type="button"
                   onClick={() => onNavigate('new-verification')}
                   className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded text-xs font-mono font-bold uppercase cursor-pointer"
                 >
-                  Start Screening
+                  START FIRST SCREENING
                 </button>
               }
             />

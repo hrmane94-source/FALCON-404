@@ -17,9 +17,9 @@ export default function App() {
       case 'new-verification':
         return <NewVerificationPage onNavigate={setCurrentSection} />
       case 'case-history':
-        return <CaseHistoryPage />
+        return <CaseHistoryPage onNavigate={setCurrentSection} />
       case 'reports':
-        return <ReportsPage />
+        return <ReportsPage onNavigate={setCurrentSection} />
       case 'settings':
         return <SettingsPage />
       default:

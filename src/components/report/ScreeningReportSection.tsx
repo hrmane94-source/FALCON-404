@@ -3,11 +3,13 @@ import {
   FileText,
   Download,
   ShieldAlert,
-  Check,
   Sliders,
   Sparkles,
   Scan,
-  Lock
+  Lock,
+  Archive,
+  CheckCircle2,
+  AlertTriangle
 } from 'lucide-react'
 import type {
   ScreeningReportData,
@@ -24,6 +26,8 @@ import {
   downloadReportFile
 } from '../../utils/reportExport'
 import { PROJECT_BRANDING } from '../../constants/branding'
+import { useCases } from '../../context/CaseContext'
+import { buildSavedCaseRecord } from '../../services/caseStorageService'
 
 export interface ScreeningReportSectionProps {
   documentName: string
@@ -33,6 +37,10 @@ export interface ScreeningReportSectionProps {
   integrityResult: ImageIntegrityResult | null
   layoutResult?: DocumentLayoutResult | null
   disabled?: boolean
+  reportId?: string
+  autoSaveStatus?: 'idle' | 'saving' | 'saved' | 'error'
+  autoSaveError?: string | null
+  onRetryAutoSave?: () => void
 }
 
 export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
@@ -42,16 +50,30 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
   ocrResult,
   integrityResult,
   layoutResult,
-  disabled = false
+  disabled = false,
+  reportId: passedReportId,
+  autoSaveStatus = 'idle',
+  autoSaveError = null,
+  onRetryAutoSave
 }) => {
+  const { saveCase, cases, stationId } = useCases()
   const [includeFullOCR, setIncludeFullOCR] = useState(false)
   const [includeIdentifiableFields, setIncludeIdentifiableFields] = useState(false)
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null)
+  const [savingState, setSavingState] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [saveFeedback, setSaveFeedback] = useState<string | null>(null)
+
+  // Stable report ID: use passed ID from screening session or fallback to local stable ID
+  const [localReportId] = useState(() => `FLC-${Math.random().toString(36).substring(2, 8).toUpperCase()}-${Date.now().toString().slice(-4)}`)
+  const reportId = passedReportId || localReportId
+  const [nowFormatted] = useState(() => new Date().toLocaleString())
 
   if (!integrityResult) return null
 
-  const reportId = `FLC-${Math.random().toString(36).substring(2, 8).toUpperCase()}-${Date.now().toString().slice(-4)}`
-  const nowFormatted = new Date().toLocaleString()
+  const isAlreadyArchived =
+    cases.some((c) => c.id === reportId) ||
+    savingState === 'saved' ||
+    autoSaveStatus === 'saved'
 
   const detectedDocTypeField = ocrResult?.candidateFields.find((f) => f.category === 'document-type')
 
@@ -72,9 +94,26 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
     }
   }
 
+  const handleSaveToLedger = async () => {
+    if (disabled || isAlreadyArchived || savingState === 'saving') return
+    try {
+      setSavingState('saving')
+      const record = buildSavedCaseRecord(reportData, stationId)
+      await saveCase(record)
+      setSavingState('saved')
+      setSaveFeedback('CASE DOSSIER SAVED TO LOCAL AUDIT LEDGER')
+      setTimeout(() => setSaveFeedback(null), 4000)
+    } catch (err) {
+      console.error('Failed to save case to local IndexedDB ledger:', err)
+      setSavingState('idle')
+      setSaveFeedback('FAILED TO SAVE CASE')
+      setTimeout(() => setSaveFeedback(null), 4000)
+    }
+  }
+
   const handleExportJson = () => {
     const jsonStr = generateScreeningReportJson(reportData)
-    const filename = `FALCON-Report-${documentName.replace(/[^a-zA-Z0-9_\-]/g, '_')}-${Date.now()}.json`
+    const filename = `FALCON-Report-${documentName.replace(/[^a-zA-Z0-9_-]/g, '_')}-${Date.now()}.json`
     downloadReportFile(jsonStr, filename, 'application/json')
     setDownloadSuccess('JSON REPORT DOWNLOADED')
     setTimeout(() => setDownloadSuccess(null), 3000)
@@ -82,7 +121,7 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
 
   const handleExportText = () => {
     const textStr = generateScreeningReportText(reportData)
-    const filename = `FALCON-Report-${documentName.replace(/[^a-zA-Z0-9_\-]/g, '_')}-${Date.now()}.txt`
+    const filename = `FALCON-Report-${documentName.replace(/[^a-zA-Z0-9_-]/g, '_')}-${Date.now()}.txt`
     downloadReportFile(textStr, filename, 'text/plain')
     setDownloadSuccess('TEXT DOSSIER DOWNLOADED')
     setTimeout(() => setDownloadSuccess(null), 3000)
@@ -396,18 +435,84 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
             </div>
           </div>
 
+          {/* Save to Ledger / Export Row */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-mono">
-              EXPORTS EXECUTE 100% LOCALLY IN BROWSER MEMORY
-            </span>
-
-            <div className="flex items-center gap-2 font-mono">
-              {downloadSuccess && (
-                <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 animate-in fade-in">
-                  <Check className="w-3.5 h-3.5" />
-                  <span>{downloadSuccess}</span>
-                </span>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-mono">
+                PRIVACY GUARANTEE: BITMAPS EXCLUDED • 100% IN-BROWSER
+              </span>
+              {(saveFeedback || downloadSuccess || autoSaveStatus === 'saved' || autoSaveError) && (
+                <div className="flex items-center gap-1.5 text-xs font-mono font-bold animate-in fade-in">
+                  {autoSaveError ? (
+                    <>
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                      <span className="text-amber-600 dark:text-amber-400">{autoSaveError}</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                      <span className="text-emerald-600 dark:text-emerald-400">
+                        {saveFeedback ||
+                          downloadSuccess ||
+                          (autoSaveStatus === 'saved'
+                            ? `Screening completed and case saved locally. (Ref: ${reportId})`
+                            : '')}
+                      </span>
+                    </>
+                  )}
+                </div>
               )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 font-mono">
+              {/* Save / Archive to Local Ledger */}
+              <button
+                type="button"
+                disabled={
+                  disabled ||
+                  isAlreadyArchived ||
+                  savingState === 'saving' ||
+                  autoSaveStatus === 'saving'
+                }
+                onClick={autoSaveStatus === 'error' && onRetryAutoSave ? onRetryAutoSave : handleSaveToLedger}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                  isAlreadyArchived
+                    ? 'bg-emerald-500/10 dark:bg-emerald-950/40 border border-emerald-500/40 text-emerald-600 dark:text-emerald-400 cursor-default'
+                    : savingState === 'saving' || autoSaveStatus === 'saving'
+                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 border border-slate-300 dark:border-slate-700 cursor-wait'
+                    : autoSaveStatus === 'error'
+                    ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-xs'
+                    : disabled
+                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
+                    : 'bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 border border-slate-900 dark:border-slate-100 shadow-2xs'
+                }`}
+                title={
+                  isAlreadyArchived
+                    ? 'This screening dossier is already saved in your browser IndexedDB ledger'
+                    : 'Save screening metrics and masked candidate fields to client IndexedDB'
+                }
+              >
+                {isAlreadyArchived ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>
+                      {autoSaveStatus === 'saved' ? 'AUTO-SAVED TO AUDIT LEDGER' : 'SAVED TO AUDIT LEDGER'}
+                    </span>
+                  </>
+                ) : savingState === 'saving' || autoSaveStatus === 'saving' ? (
+                  <span>ARCHIVING...</span>
+                ) : autoSaveStatus === 'error' ? (
+                  <>
+                    <AlertTriangle className="w-3.5 h-3.5 text-white" />
+                    <span>RETRY SAVE TO LEDGER</span>
+                  </>
+                ) : (
+                  <>
+                    <Archive className="w-3.5 h-3.5 text-orange-400" />
+                    <span>SAVE TO AUDIT LEDGER</span>
+                  </>
+                )}
+              </button>
 
               <button
                 type="button"

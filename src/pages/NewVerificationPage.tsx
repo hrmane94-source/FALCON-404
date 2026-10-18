@@ -7,9 +7,10 @@ import {
   RotateCcw,
   FileCheck2,
   Lock,
-  Layers,
   Loader2,
-  AlertTriangle
+  AlertTriangle,
+  Sparkles,
+  ShieldCheck
 } from 'lucide-react'
 import type {
   NavigationSection,
@@ -17,13 +18,19 @@ import type {
   UploadedDocument,
   OCRStatus,
   OCRProgress,
-  OCRResult
+  OCRResult,
+  IntegrityAnalysisStatus,
+  IntegrityProgress,
+  ImageIntegrityResult
 } from '../types'
 import { Card } from '../components/common/Card'
 import { Badge } from '../components/common/Badge'
 import { DocumentUploader } from '../components/upload/DocumentUploader'
 import { OCRAnalysisSection } from '../components/ocr/OCRAnalysisSection'
+import { ImageIntegritySection } from '../components/integrity/ImageIntegritySection'
+import { ScreeningReportSection } from '../components/report/ScreeningReportSection'
 import { performOCR } from '../services/ocrService'
+import { performImageIntegrityAnalysis } from '../services/imageIntegrityService'
 
 export interface NewVerificationPageProps {
   onNavigate: (section: NavigationSection) => void
@@ -34,11 +41,17 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
   const [selectedDocType, setSelectedDocType] = useState<DocumentType>('National ID')
   const [uploadedDoc, setUploadedDoc] = useState<UploadedDocument | null>(null)
 
-  // OCR state
+  // Stage 02: OCR state
   const [ocrStatus, setOcrStatus] = useState<OCRStatus>('idle')
   const [ocrProgress, setOcrProgress] = useState<OCRProgress | null>(null)
   const [ocrResult, setOcrResult] = useState<OCRResult | null>(null)
   const [ocrError, setOcrError] = useState<string | null>(null)
+
+  // Stage 03: Image Integrity state
+  const [integrityStatus, setIntegrityStatus] = useState<IntegrityAnalysisStatus>('idle')
+  const [integrityProgress, setIntegrityProgress] = useState<IntegrityProgress | null>(null)
+  const [integrityResult, setIntegrityResult] = useState<ImageIntegrityResult | null>(null)
+  const [integrityError, setIntegrityError] = useState<string | null>(null)
 
   // Clean up Object URL on unmount to prevent memory leaks
   useEffect(() => {
@@ -49,20 +62,24 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
     }
   }, [uploadedDoc])
 
-  const resetOCRState = () => {
+  const resetAnalysisState = () => {
     setOcrStatus('idle')
     setOcrProgress(null)
     setOcrResult(null)
     setOcrError(null)
+    setIntegrityStatus('idle')
+    setIntegrityProgress(null)
+    setIntegrityResult(null)
+    setIntegrityError(null)
   }
 
   const handleDocumentSelected = (doc: UploadedDocument) => {
-    resetOCRState()
+    resetAnalysisState()
     setUploadedDoc(doc)
   }
 
   const handleDocumentRemoved = () => {
-    resetOCRState()
+    resetAnalysisState()
     setUploadedDoc(null)
   }
 
@@ -70,7 +87,7 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
     if (uploadedDoc?.previewUrl) {
       URL.revokeObjectURL(uploadedDoc.previewUrl)
     }
-    resetOCRState()
+    resetAnalysisState()
     setUploadedDoc(null)
     setCurrentStep('upload')
   }
@@ -109,7 +126,47 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
     }
   }
 
+  const handleRunIntegrity = async () => {
+    if (!uploadedDoc?.file || !uploadedDoc.previewUrl) return
+
+    setIntegrityStatus('analyzing')
+    setIntegrityError(null)
+    setIntegrityProgress({
+      status: 'Reading container headers...',
+      progress: 0.1,
+      stage: 'reading'
+    })
+
+    try {
+      const result = await performImageIntegrityAnalysis({
+        file: uploadedDoc.file,
+        previewUrl: uploadedDoc.previewUrl,
+        onProgress: (prog) => {
+          setIntegrityProgress(prog)
+        }
+      })
+
+      setIntegrityResult(result)
+      setIntegrityStatus('success')
+    } catch (err: any) {
+      setIntegrityStatus('error')
+      setIntegrityError(
+        err?.message || 'Failed to complete image integrity analysis. Please try another image.'
+      )
+    }
+  }
+
+  const handleRunCompleteScreening = async () => {
+    if (!uploadedDoc?.file) return
+    if (ocrStatus !== 'success') {
+      await handleRunOCR()
+    }
+    await handleRunIntegrity()
+  }
+
   const isOcrRunning = ocrStatus === 'initializing' || ocrStatus === 'recognizing'
+  const isIntegrityRunning = integrityStatus === 'analyzing'
+  const isProcessing = isOcrRunning || isIntegrityRunning
 
   const documentOptions: { type: DocumentType; label: string; description: string }[] = [
     {
@@ -140,39 +197,50 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
   ]
 
   const getStep2BannerContent = () => {
-    if (isOcrRunning) {
+    if (isProcessing) {
       return {
         icon: <Loader2 className="w-4.5 h-4.5 animate-spin text-blue-600" />,
         iconBg: 'bg-blue-50 border-blue-200',
-        title: 'Running Stage 02: Optical Character Recognition (OCR)...',
+        title: isOcrRunning
+          ? 'Running Stage 02: Optical Character Recognition (OCR)...'
+          : 'Running Stage 03: Image Integrity & Forensics...',
         subtitle:
-          'Client-side WebAssembly worker is analyzing document glyphs and transcribing text in-browser. Please wait.'
+          'Client-side WebAssembly worker is actively analyzing document glyphs and physical raster properties. Please wait.'
+      }
+    }
+    if (integrityResult && ocrResult) {
+      return {
+        icon: <FileCheck2 className="w-4.5 h-4.5 text-emerald-600" />,
+        iconBg: 'bg-emerald-50 border-emerald-200',
+        title: 'Preliminary Document Screening Completed',
+        subtitle:
+          'Client-side OCR transcription and image integrity checks are complete. Review explainable findings and download the screening dossier below.'
       }
     }
     if (ocrStatus === 'success') {
       return {
-        icon: <FileCheck2 className="w-4.5 h-4.5 text-emerald-600" />,
-        iconBg: 'bg-emerald-50 border-emerald-200',
-        title: 'Document Ingestion & OCR Text Extraction Completed',
+        icon: <Sparkles className="w-4.5 h-4.5 text-purple-600" />,
+        iconBg: 'bg-purple-50 border-purple-200',
+        title: 'OCR Complete • Stage 03 Integrity Analysis Ready',
         subtitle:
-          'Text lines and candidate structured fields have been extracted in-memory. Tamper detection and biometric matching are planned for subsequent phases.'
+          'Document characters have been extracted. Click "Run Image Integrity Analysis" below to evaluate raster exposure, blur, metadata headers, and Error Level Analysis (ELA).'
       }
     }
-    if (ocrStatus === 'error') {
+    if (ocrStatus === 'error' || integrityStatus === 'error') {
       return {
         icon: <AlertTriangle className="w-4.5 h-4.5 text-rose-600" />,
         iconBg: 'bg-rose-50 border-rose-200',
-        title: 'Document Ingested — OCR Extraction Failed',
+        title: 'Document Ingestion Flagged an Engine Error',
         subtitle:
-          'The client-side optical recognition engine encountered an error while processing this image raster. You may retry below or upload a clearer file.'
+          'One of the client-side screening pipelines encountered an error. You may retry below or upload a different image.'
       }
     }
     return {
-      icon: <FileCheck2 className="w-4.5 h-4.5 text-emerald-600" />,
-      iconBg: 'bg-emerald-50 border-emerald-200',
-      title: 'Document uploaded successfully. Stage 02 OCR is ready to run.',
+      icon: <FileCheck2 className="w-4.5 h-4.5 text-blue-600" />,
+      iconBg: 'bg-blue-50 border-blue-200',
+      title: 'Document Uploaded Successfully • Ready for Screening',
       subtitle:
-        'Your document file has been received and validated in-memory by the browser intake module. Click "Run OCR Analysis" below to extract visible text and candidate fields using client-side WebAssembly.'
+        'Your document file is validated in-memory. You can execute individual OCR and Image Integrity checks below or run a complete preliminary screening.'
     }
   }
 
@@ -188,11 +256,11 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
               New Verification
             </h2>
             <Badge variant="info" size="sm">
-              Phase 3: OCR
+              Phase 4: Preliminary Screening
             </Badge>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Functional document intake and genuine client-side Optical Character Recognition.
+            Functional document intake, client-side OCR, image integrity analysis, and screening dossier.
           </p>
         </div>
 
@@ -229,7 +297,7 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
             >
               2
             </span>
-            <span>Review &amp; OCR</span>
+            <span>Screening &amp; Review</span>
           </div>
         </div>
       </div>
@@ -308,13 +376,13 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
                     : 'bg-slate-200 text-slate-400 cursor-not-allowed'
                 }`}
               >
-                <span>Continue to Review &amp; OCR</span>
+                <span>Continue to Screening &amp; Review</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </Card>
 
-          {/* Privacy & Prototype Notice */}
+          {/* Privacy & Protocol Notice */}
           <div className="p-4 rounded-xl bg-white border border-slate-200/80 text-xs text-slate-600 space-y-1.5">
             <div className="flex items-center gap-2 text-slate-900 font-semibold">
               <Lock className="w-3.5 h-3.5 text-slate-500" />
@@ -327,7 +395,7 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
         </div>
       )}
 
-      {/* STEP 2: REVIEW INGESTION & OCR ANALYSIS */}
+      {/* STEP 2: REVIEW INGESTION & SCREENING WORKFLOW */}
       {currentStep === 'review' && uploadedDoc && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Review Status Banner */}
@@ -351,7 +419,7 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/70 text-[11px] text-slate-600 flex items-start gap-2">
               <ShieldAlert className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
               <p>
-                <strong>Evaluation Transparency:</strong> FALCON performs genuine client-side OCR character transcription. It does not classify this document as authentic or forged. No digital forensic tampering checks or biometric facial matching have been executed.
+                <strong>Evaluation Transparency:</strong> FALCON performs client-side OCR character transcription and image integrity checks. It does not certify documents as authentic, nor does it definitively establish fraud. No official government registry lookup or live 1:1 face matching has been executed.
               </p>
             </div>
           </div>
@@ -363,15 +431,15 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
             action={
               <button
                 type="button"
-                disabled={isOcrRunning}
+                disabled={isProcessing}
                 onClick={() => {
-                  if (!isOcrRunning) {
-                    resetOCRState()
+                  if (!isProcessing) {
+                    resetAnalysisState()
                     setCurrentStep('upload')
                   }
                 }}
                 className={`text-xs font-medium cursor-pointer ${
-                  isOcrRunning
+                  isProcessing
                     ? 'text-slate-400 cursor-not-allowed'
                     : 'text-blue-600 hover:text-blue-800'
                 }`}
@@ -447,47 +515,91 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
                   )}
                 </div>
 
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/60 space-y-1">
-                  <span className="text-[10px] uppercase font-mono text-slate-400 block">
-                    Planned Pipeline Next Steps (Phase 4 &amp; 5)
-                  </span>
-                  <div className="flex items-center gap-1.5 text-slate-600">
-                    <Layers className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Error Level Analysis (ELA) for image compression anomalies</span>
+                {/* Primary Complete Screening Trigger Button */}
+                <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-blue-50/50 rounded-xl border border-blue-200/60">
+                  <div>
+                    <span className="text-xs font-semibold text-blue-950 block">
+                      Automated Preliminary Screening
+                    </span>
+                    <span className="text-[11px] text-blue-700">
+                      Execute OCR and Image Integrity Analysis in one pass.
+                    </span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-slate-600">
-                    <Layers className="w-3.5 h-3.5 text-slate-400" />
-                    <span>1:1 Facial biometric portrait matching against live reference</span>
-                  </div>
+
+                  <button
+                    type="button"
+                    disabled={isProcessing}
+                    onClick={handleRunCompleteScreening}
+                    className={`inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold shadow-xs transition-all cursor-pointer ${
+                      isProcessing
+                        ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                        : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20'
+                    }`}
+                  >
+                    {isProcessing ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Screening Active...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>Run Full Screening</span>
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
             </div>
           </Card>
 
-          {/* Genuine Client-Side OCR Analysis Section */}
+          {/* STAGE 02: Genuine Client-Side OCR Analysis Section */}
           <OCRAnalysisSection
             ocrStatus={ocrStatus}
             ocrProgress={ocrProgress}
             ocrResult={ocrResult}
             ocrError={ocrError}
-            disabled={isOcrRunning}
+            disabled={isProcessing}
             onRunOCR={handleRunOCR}
             onRetryOCR={handleRunOCR}
           />
+
+          {/* STAGE 03: Image Integrity, Quality, and ELA Section */}
+          <ImageIntegritySection
+            status={integrityStatus}
+            progress={integrityProgress}
+            result={integrityResult}
+            error={integrityError}
+            disabled={isProcessing}
+            onRunAnalysis={handleRunIntegrity}
+            onRetryAnalysis={handleRunIntegrity}
+          />
+
+          {/* PRELIMINARY SCREENING REPORT (Appears when integrity analysis has executed) */}
+          {integrityResult && (
+            <ScreeningReportSection
+              documentName={uploadedDoc.name}
+              selectedDocumentType={selectedDocType}
+              ocrStatus={ocrStatus}
+              ocrResult={ocrResult}
+              integrityResult={integrityResult}
+              disabled={isProcessing}
+            />
+          )}
 
           {/* Bottom Navigation & Action Bar */}
           <div className="pt-2 border-t border-slate-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <button
               type="button"
-              disabled={isOcrRunning}
+              disabled={isProcessing}
               onClick={() => {
-                if (!isOcrRunning) {
-                  resetOCRState()
+                if (!isProcessing) {
+                  resetAnalysisState()
                   setCurrentStep('upload')
                 }
               }}
               className={`inline-flex items-center gap-1.5 text-xs font-medium cursor-pointer ${
-                isOcrRunning
+                isProcessing
                   ? 'text-slate-400 cursor-not-allowed'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
@@ -499,10 +611,10 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                disabled={isOcrRunning}
+                disabled={isProcessing}
                 onClick={handleReset}
                 className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
-                  isOcrRunning
+                  isProcessing
                     ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                 }`}
@@ -513,10 +625,10 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
 
               <button
                 type="button"
-                disabled={isOcrRunning}
+                disabled={isProcessing}
                 onClick={() => onNavigate('overview')}
                 className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
-                  isOcrRunning
+                  isProcessing
                     ? 'bg-slate-400 text-slate-200 cursor-not-allowed'
                     : 'bg-slate-900 hover:bg-slate-800 text-white'
                 }`}

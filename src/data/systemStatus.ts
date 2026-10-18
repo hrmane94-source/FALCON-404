@@ -32,10 +32,10 @@ export const SYSTEM_STATUS_COMPONENTS: SystemComponentStatus[] = [
     id: 'forensic-engine',
     name: 'Forensic Analysis',
     category: 'ai-engine',
-    status: 'not-integrated',
-    description: 'Image alteration and tamper analysis scheduled for Phase 4.',
+    status: 'available',
+    description: 'Client-side image quality metrics, metadata audit, and Error Level Analysis (ELA) active.',
     phase: 'Phase 4',
-    techDetails: 'Forensics Pipeline'
+    techDetails: 'Canvas ELA & Metadata'
   },
   {
     id: 'face-verification',

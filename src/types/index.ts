@@ -75,3 +75,130 @@ export interface OCRResult {
   extractedAt: string
 }
 
+// ==========================================
+// Phase 4: Image Integrity & Screening Types
+// ==========================================
+
+export type FindingCategory = 'quality' | 'metadata' | 'manipulation' | 'limitations'
+export type FindingSeverity = 'info' | 'low' | 'medium' | 'high'
+
+export interface IntegrityFinding {
+  id: string
+  title: string
+  category: FindingCategory
+  severity: FindingSeverity
+  metricName: string
+  measuredValue: string | number
+  threshold?: string | number
+  observation: string
+  explanation: string
+  importance: string
+  recommendation: string
+  limitations?: string
+}
+
+export interface ImageQualityMetrics {
+  width: number
+  height: number
+  aspectRatio: number
+  aspectRatioLabel: string
+  physicalRatioMeasured: boolean
+  physicalRatioNote: string
+  meanLuminance: number // 0 - 255
+  contrastStdDev: number // RMS contrast
+  blurScore: number // Laplacian variance
+  isLowResolution: boolean
+  isExtremeLuminance: boolean
+  isLowContrast: boolean
+  isPotentialBlur: boolean
+}
+
+export type MetadataStatus = 'present' | 'unavailable' | 'error'
+
+export interface MetadataReport {
+  status: MetadataStatus
+  format: string
+  fileSizeFormatted: string
+  hasExif: boolean
+  hasJfif: boolean
+  softwareDetected?: string
+  creationTimestamp?: string
+  cameraMakeModel?: string
+  colorProfile?: string
+  rawEntries: Record<string, string>
+  note: string
+  containerStatusLabel: string
+  exifStatusLabel: string
+  cameraStatusLabel: string
+  softwareStatusLabel: string
+  timestampStatusLabel: string
+}
+
+export interface ELAMetrics {
+  performed: boolean
+  supported: boolean
+  meanError: number
+  maxError: number
+  variance: number
+  hotspotCount: number
+  recompressionQuality: number
+  elaVisualizationUrl?: string
+  assessmentNote: string
+}
+
+export type ReviewPriorityCategory = 'standard' | 'manual-review' | 'inconclusive'
+
+export interface PreliminaryAssessment {
+  priority: ReviewPriorityCategory
+  priorityLabel: string
+  summary: string
+  contributingFindings: IntegrityFinding[]
+  recommendedAction: string
+  disclaimer: string
+}
+
+export type IntegrityAnalysisStatus = 'idle' | 'analyzing' | 'success' | 'error'
+
+export interface IntegrityProgress {
+  status: string
+  progress: number // 0 to 1
+  stage?: 'reading' | 'quality' | 'metadata' | 'forensics' | 'complete'
+}
+
+export interface ImageIntegrityResult {
+  fileProperties: {
+    fileName: string
+    fileSizeBytes: number
+    fileSizeFormatted: string
+    detectedFormat: string
+    mimeType: string
+    dimensions: { width: number; height: number }
+    aspectRatio: number
+  }
+  quality: ImageQualityMetrics
+  metadata: MetadataReport
+  ela: ELAMetrics
+  findings: IntegrityFinding[]
+  assessment: PreliminaryAssessment
+  analyzedAt: string
+}
+
+export interface ReportPrivacySettings {
+  includeFullOCR: boolean
+  includeIdentifiableFields: boolean
+}
+
+export interface ScreeningReportData {
+  reportId: string
+  generatedAt: string
+  documentName: string
+  selectedDocumentType: string
+  detectedDocumentType?: string
+  ocrStatus: OCRStatus
+  ocrConfidence?: number
+  ocrResult?: OCRResult
+  integrityResult: ImageIntegrityResult
+  privacySettings: ReportPrivacySettings
+}
+
+

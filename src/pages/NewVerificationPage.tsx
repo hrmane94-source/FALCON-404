@@ -31,6 +31,7 @@ import { ImageIntegritySection } from '../components/integrity/ImageIntegritySec
 import { ScreeningReportSection } from '../components/report/ScreeningReportSection'
 import { performOCR } from '../services/ocrService'
 import { performImageIntegrityAnalysis } from '../services/imageIntegrityService'
+import { PROJECT_BRANDING } from '../constants/branding'
 
 export interface NewVerificationPageProps {
   onNavigate: (section: NavigationSection) => void
@@ -639,6 +640,12 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
           </div>
         </div>
       )}
+
+      {/* Secondary Information & Developer Attribution Footer */}
+      <div className="pt-4 border-t border-slate-200/60 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-400">
+        <span>{PROJECT_BRANDING.developerFullAttribution}</span>
+        <span className="text-[11px]">{PROJECT_BRANDING.challengeName}</span>
+      </div>
     </div>
   )
 }

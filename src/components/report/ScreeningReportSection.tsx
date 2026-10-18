@@ -20,6 +20,7 @@ import {
   generateScreeningReportText,
   downloadReportFile
 } from '../../utils/reportExport'
+import { PROJECT_BRANDING } from '../../constants/branding'
 
 export interface ScreeningReportSectionProps {
   documentName: string
@@ -86,7 +87,7 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
   return (
     <Card
       title="Preliminary Screening Report"
-      subtitle={`Generated ${nowFormatted} • Dossier Ref: ${reportId}`}
+      subtitle={`Generated ${nowFormatted} • Dossier Ref: ${reportId} • ${PROJECT_BRANDING.projectDeveloperCredit}`}
       action={
         <div className="flex items-center gap-2">
           {assessment.priority === 'standard' && (
@@ -390,6 +391,11 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
                 <span>Export JSON Report</span>
               </button>
             </div>
+          </div>
+
+          <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-slate-400 gap-1">
+            <span className="font-medium text-slate-500">{PROJECT_BRANDING.projectDeveloperCredit}</span>
+            <span>Institutional Identity Screening Terminal</span>
           </div>
         </div>
       </div>

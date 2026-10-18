@@ -9,6 +9,7 @@ import {
   X
 } from 'lucide-react'
 import type { NavigationSection } from '../../types'
+import { PROJECT_BRANDING } from '../../constants/branding'
 
 export interface SidebarProps {
   currentSection: NavigationSection
@@ -86,7 +87,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
               <div>
                 <span className="font-bold text-lg tracking-tight text-slate-900 block leading-tight">
-                  FALCON
+                  {PROJECT_BRANDING.projectName}
                 </span>
                 <span className="text-[11px] text-slate-500 font-normal block leading-tight">
                   Document Screening
@@ -147,9 +148,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </nav>
 
-        {/* Footer / System status note */}
-        <div className="p-4 border-t border-slate-100 bg-slate-50/50">
-          <div className="flex items-center justify-between text-xs text-slate-500">
+        {/* Developer Attribution & System status note */}
+        <div className="p-4 border-t border-slate-100 bg-slate-50/50 space-y-2.5">
+          <div className="text-[11px] leading-tight">
+            <span className="text-slate-400 block font-normal text-[10px] uppercase tracking-wider">
+              Developed by
+            </span>
+            <span className="font-semibold text-slate-800 text-xs">
+              {PROJECT_BRANDING.developerName}
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-200/50">
             <span className="text-slate-500 font-medium">Phase 1</span>
             <span className="text-slate-400">Frontend Prototype</span>
           </div>

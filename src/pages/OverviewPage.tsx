@@ -9,6 +9,7 @@ import { Badge } from '../components/common/Badge'
 import { Modal } from '../components/common/Modal'
 import { EmptyState } from '../components/common/EmptyState'
 import { DEMO_CASE_RECORDS } from '../data/mockCases'
+import { PROJECT_BRANDING } from '../constants/branding'
 
 export interface OverviewPageProps {
   onNavigate: (section: NavigationSection) => void
@@ -25,9 +26,14 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({ onNavigate }) => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
           {/* Left Column: Mission & Call to Action */}
           <div className="lg:col-span-7 space-y-4">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 border border-slate-200/60 text-xs text-slate-600 font-medium">
-              <ShieldCheck className="w-3.5 h-3.5 text-orange-500" />
-              <span>Seva First Innovation Challenge 2026</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200/60 text-xs text-slate-700 font-medium">
+                <ShieldCheck className="w-3.5 h-3.5 text-orange-500" />
+                <span>{PROJECT_BRANDING.projectName}</span>
+              </div>
+              <span className="text-xs text-slate-500 font-normal">
+                {PROJECT_BRANDING.developerAttribution}
+              </span>
             </div>
 
             <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-[1.15]">
@@ -166,6 +172,18 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({ onNavigate }) => {
             />
           )}
         </Card>
+      </section>
+
+      {/* 6. Subtle Project Information Footer */}
+      <section className="pt-2">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-3 py-3 text-xs text-slate-500 bg-white/70 rounded-xl border border-slate-200/60">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-slate-800">{PROJECT_BRANDING.projectName}</span>
+            <span className="text-slate-300">•</span>
+            <span>{PROJECT_BRANDING.developerAttribution}</span>
+          </div>
+          <span className="text-slate-400 text-[11px]">{PROJECT_BRANDING.challengeName}</span>
+        </div>
       </section>
 
       {/* Case Details Modal */}

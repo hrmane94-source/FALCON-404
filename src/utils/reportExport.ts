@@ -5,6 +5,7 @@
  */
 
 import type { ScreeningReportData } from '../types'
+import { PROJECT_BRANDING } from '../constants/branding'
 
 /**
  * Safely anonymizes a candidate person's name for export.
@@ -107,10 +108,12 @@ export function generateScreeningReportJson(report: ScreeningReportData): string
   const exportPayload = {
     reportMetadata: {
       reportId: report.reportId,
-      systemName: 'FALCON Institutional Identity Screening Terminal',
+      projectName: PROJECT_BRANDING.projectName,
+      developer: PROJECT_BRANDING.developerName,
+      systemName: PROJECT_BRANDING.projectFullName,
       phase: 'Phase 4: Image Integrity & Preliminary Screening',
       generatedAt: report.generatedAt,
-      engineVersion: 'FALCON-404 v0.4'
+      engineVersion: PROJECT_BRANDING.version
     },
     documentIntake: {
       fileName: report.documentName,
@@ -229,8 +232,11 @@ export function generateScreeningReportText(report: ScreeningReportData): string
     '================================================================================',
     '                   FALCON-404 DOCUMENT SCREENING DOSSIER',
     '       Client-Side Ingestion, OCR & Image Integrity Preliminary Report',
+    `                   ${PROJECT_BRANDING.projectDeveloperCredit}`,
     '================================================================================',
     `Report ID        : ${report.reportId}`,
+    `Project          : ${PROJECT_BRANDING.projectName}`,
+    `Developed By     : ${PROJECT_BRANDING.developerName}`,
     `Generated At     : ${dateStr}`,
     `Document File    : ${report.documentName}`,
     `File Size        : ${report.integrityResult.fileProperties.fileSizeFormatted}`,
@@ -345,6 +351,8 @@ export function generateScreeningReportText(report: ScreeningReportData): string
     '   compression anomalies. They do NOT certify genuine issuance or detect identity theft.',
     '3. Scheduled Phases: Physical microprint examination, digital copy-move splicing,',
     '   and 1:1 facial biometric matching are staged for subsequent project phases.',
+    '--------------------------------------------------------------------------------',
+    `                 ${PROJECT_BRANDING.projectDeveloperCredit}`,
     '================================================================================',
     '                          END OF SCREENING REPORT',
     '================================================================================'

@@ -3,16 +3,218 @@
  * Extracts heuristic candidate fields from raw OCR text without claiming database verification.
  */
 
-import type { CandidateField } from '../types'
+import type { CandidateField, OCRTextRegion } from '../types'
 
 export type { CandidateField }
 
+// Prohibited keywords that cannot constitute a personal subject name
+export const INSTITUTIONAL_AUTHORITY_KEYWORDS = [
+  'GOVERNMENT', 'GOVT', 'INDIA', 'REPUBLIC', 'AUTHORITY', 'UNIQUE', 'IDENTIFICATION',
+  'UIDAI', 'DEPARTMENT', 'MINISTRY', 'COMMISSION', 'ELECTION', 'STATE', 'UNION',
+  'NATIONAL', 'CENTRAL', 'EMBLEM', 'TRANSPORT', 'HIGHWAY', 'REVENUE', 'INCOME TAX',
+  'BHARAT', 'SARKAR', 'OFFICIAL', 'PRESIDENT', 'MINISTER'
+]
+
+export const DOCUMENT_TYPE_KEYWORDS = [
+  'AADHAAR', 'PASSPORT', 'DRIVING', 'LICENCE', 'LICENSE', 'PAN', 'VOTER',
+  'ELECTORAL', 'IDENTITY', 'DOCUMENT', 'CARD', 'SPECIMEN', 'SAMPLE', 'DEMO',
+  'CITIZEN', 'RECORD', 'CERTIFICATE', 'NUMBER', 'PERMANENT', 'ACCOUNT'
+]
+
+export const ADDRESS_AND_GUARDIAN_KEYWORDS = [
+  'ADDRESS', 'S/O', 'D/O', 'W/O', 'C/O', 'SON OF', 'DAUGHTER OF', 'WIFE OF', 'CARE OF',
+  'FATHER', 'MOTHER', 'HUSBAND', 'GUARDIAN', 'HOUSE', 'SECTOR', 'ROAD', 'STREET',
+  'LANE', 'NAGAR', 'COLONY', 'VILLAGE', 'DISTRICT', 'STATE', 'PINCODE', 'PIN',
+  'POST', 'TEHSIL', 'TALUK', 'PO', 'PS', 'FLAT', 'BUILDING', 'APARTMENT', 'FLOOR',
+  'BLOCK', 'NEAR', 'OPP', 'BEHIND', 'PLOT', 'POST OFFICE', 'WARD', 'AREA',
+  'पता', 'पुत्र', 'पुत्री', 'पत्नी', 'मकान'
+]
+
+export const DATE_AND_GENDER_KEYWORDS = [
+  'DOB', 'DATE', 'BIRTH', 'YEAR', 'YOB', 'ISSUE', 'EXPIRY', 'VALID',
+  'MALE', 'FEMALE', 'TRANSGENDER', 'GENDER', 'SEX', 'MALE,', 'FEMALE,',
+  'पुरुष', 'महिला', 'जन्म', 'तिथि'
+]
+
+export const SLOGAN_AND_FOOTER_KEYWORDS = [
+  'MERA AADHAAR', 'MERI PEHCHAN', 'HELP@UIDAI', 'WWW.UIDAI', 'TOLL FREE',
+  'SIGNATURE', 'HOLDER', 'PHOTO', 'THROUGHOUT', 'VID:', 'VID', 'ENROLLMENT',
+  'DOWNLOAD', 'PORTAL', 'VERIFY'
+]
+
+export function isPlausibleNameString(str: string): { plausible: boolean; isInitialsOnly: boolean; reason?: string } {
+  const trimmed = str.trim()
+  if (!trimmed || trimmed.length < 3 || trimmed.length > 45) {
+    return { plausible: false, isInitialsOnly: false, reason: 'Invalid length' }
+  }
+
+  // Must only contain latin letters, spaces, periods, apostrophes, hyphens
+  if (!/^[A-Za-z\s\.\-']+$/.test(trimmed)) {
+    return { plausible: false, isInitialsOnly: false, reason: 'Contains invalid characters' }
+  }
+
+  // Reject digits
+  if (/\d/.test(trimmed)) {
+    return { plausible: false, isInitialsOnly: false, reason: 'Contains digits' }
+  }
+
+  const upper = trimmed.toUpperCase()
+
+  // Prohibited keyword checks
+  const allProhibited = [
+    ...INSTITUTIONAL_AUTHORITY_KEYWORDS,
+    ...DOCUMENT_TYPE_KEYWORDS,
+    ...ADDRESS_AND_GUARDIAN_KEYWORDS,
+    ...DATE_AND_GENDER_KEYWORDS,
+    ...SLOGAN_AND_FOOTER_KEYWORDS
+  ]
+
+  for (const kw of allProhibited) {
+    const escaped = kw.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+    const regex = new RegExp(`(^|\\s|[:\\/\\-])${escaped}(\\s|[:\\/\\-]|$)`, 'i')
+    if (regex.test(upper)) {
+      return { plausible: false, isInitialsOnly: false, reason: `Matches prohibited keyword: ${kw}` }
+    }
+  }
+
+  // Check word tokens
+  const words = trimmed.split(/\s+/).filter((w) => w.length > 0)
+  if (words.length === 0) {
+    return { plausible: false, isInitialsOnly: false, reason: 'No words found' }
+  }
+
+  // Discard arbitrary initials or short fragments like "N L J", "A B C", "N"
+  const isAllSingleLetters = words.every((w) => w.replace(/[^A-Za-z]/g, '').length <= 1)
+  if (isAllSingleLetters) {
+    return { plausible: false, isInitialsOnly: true, reason: 'Initials-only or short fragment without full name tokens' }
+  }
+
+  // Every word token in a personal name must begin with an uppercase letter [A-Z]
+  const allCapitalized = words.every((w) => /^[A-Z]/.test(w))
+  if (!allCapitalized) {
+    return { plausible: false, isInitialsOnly: false, reason: 'Words must begin with uppercase letter' }
+  }
+
+  // A genuine personal name must have at least one token with length >= 3 (e.g. "Roy", "John", "Rohan", "Patil")
+  const hasSubstantialToken = words.some((w) => w.replace(/[^A-Za-z]/g, '').length >= 3)
+  if (!hasSubstantialToken) {
+    return { plausible: false, isInitialsOnly: false, reason: 'Must contain at least one name token with >= 3 letters' }
+  }
+
+  return { plausible: true, isInitialsOnly: false }
+}
+
+export function parseCandidateSubjectName(
+  lines: string[],
+  _textRegions?: OCRTextRegion[]
+): {
+  value: string
+  confidenceTier: 'confident' | 'review' | 'not-detected'
+  patternMatched: string
+  contextNote?: string
+} {
+  // 1. Explicit Label-Based Extraction
+  // English & Multilingual labels
+  const labelPrefixRegex = /^(?:Full\s*Name|Candidate\s*Name|Name\s*of\s*Candidate|Given\s*Name|Cardholder\s*Name|Holder\s*Name|Surname|Name|नाम|पूरा\s*नाम)[:\s\-\.\/]+([A-Za-z\s\.\-']{2,45})$/i
+  const standaloneLabelRegex = /^(?:Full\s*Name|Candidate\s*Name|Name\s*of\s*Candidate|Given\s*Name|Cardholder\s*Name|Holder\s*Name|Surname|Name|नाम|पूरा\s*नाम)[:\s\-\.]*$/i
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim()
+
+    // 1A. Same line match
+    const sameMatch = line.match(labelPrefixRegex)
+    if (sameMatch && sameMatch[1]) {
+      const candidate = sameMatch[1].trim()
+      const check = isPlausibleNameString(candidate)
+      if (check.plausible) {
+        return {
+          value: candidate,
+          confidenceTier: 'confident',
+          patternMatched: 'Extracted following explicit Name label indicator'
+        }
+      }
+    }
+
+    // 1B. Adjacent next line match
+    if (standaloneLabelRegex.test(line) && i + 1 < lines.length) {
+      const nextLine = lines[i + 1].trim()
+      const check = isPlausibleNameString(nextLine)
+      if (check.plausible) {
+        return {
+          value: nextLine,
+          confidenceTier: 'confident',
+          patternMatched: 'Extracted from adjacent line following Name label'
+        }
+      }
+    }
+  }
+
+  // 2. Positional / Anchored Credential Subject Extraction (e.g. National ID / Aadhaar)
+  let dobIndex = -1
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].toUpperCase()
+    if (l.includes('DOB') || l.includes('BIRTH') || lines[i].includes('जन्म') || lines[i].includes('तिथि')) {
+      dobIndex = i
+      break
+    }
+  }
+
+  if (dobIndex > 0) {
+    // Check lines preceding DOB (up to 3 lines prior, e.g. English name directly above DOB)
+    for (let i = dobIndex - 1; i >= Math.max(0, dobIndex - 3); i--) {
+      const line = lines[i].trim()
+
+      // Skip lines with Devanagari characters (local script name header)
+      if (/[\u0900-\u097F]/.test(line)) continue
+
+      const check = isPlausibleNameString(line)
+      if (check.plausible) {
+        return {
+          value: line,
+          confidenceTier: 'confident',
+          patternMatched: 'Extracted from credential subject header positioned directly above Date of Birth'
+        }
+      }
+    }
+  }
+
+  // 3. Fallback Heuristic Review Tier
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim()
+    if (/[\u0900-\u097F]/.test(line)) continue
+
+    const check = isPlausibleNameString(line)
+    if (check.plausible) {
+      const words = line.split(/\s+/).filter((w) => w.length > 0)
+      if (words.length >= 2 && words.length <= 4) {
+        return {
+          value: line,
+          confidenceTier: 'review',
+          patternMatched: 'Heuristic candidate name detected without label confirmation; examiner review required',
+          contextNote: 'Potential personal name string detected without explicit label anchor. Please verify against document capture.'
+        }
+      }
+    }
+  }
+
+  // 4. Fallback Not Confidently Detected
+  return {
+    value: 'Name not confidently detected',
+    confidenceTier: 'not-detected',
+    patternMatched: 'No reliable name label or credential subject line detected in OCR text',
+    contextNote: 'Optical text does not contain a verified name label or anchored credential subject name.'
+  }
+}
 
 /**
  * Transparent heuristic extraction of candidate fields from raw OCR text.
  * Note: These are pattern-matched candidates only; they are not authenticated.
  */
-export function extractCandidateFields(rawText: string, _selectedCategory?: string): CandidateField[] {
+export function extractCandidateFields(
+  rawText: string,
+  _selectedCategory?: string,
+  textRegions?: OCRTextRegion[]
+): CandidateField[] {
   if (!rawText || rawText.trim().length === 0) {
     return []
   }
@@ -166,46 +368,20 @@ export function extractCandidateFields(rawText: string, _selectedCategory?: stri
     }
   }
 
-  // 4. Candidate Subject Name Detection
-  for (const line of lines) {
-    const nameLabelMatch = line.match(/(?:Name|Given\s*Name|Holder|Surname)[:\s]+([A-Za-z\s\.\(\)]+)/i)
-    if (nameLabelMatch && nameLabelMatch[1] && nameLabelMatch[1].trim().length > 2) {
-      const candidateName = nameLabelMatch[1].trim()
-      if (!fields.some((f) => f.category === 'name')) {
-        fields.push({
-          id: 'name-labeled',
-          label: 'Candidate Subject Name',
-          value: candidateName,
-          patternMatched: 'Extracted following "Name" label indicator',
-          category: 'name'
-        })
-      }
-    }
-  }
-
-  // If no labeled name found, check for ALL CAPS lines that look like a person's name (2-3 words, no numbers)
-  if (!fields.some((f) => f.category === 'name')) {
-    for (const line of lines) {
-      if (
-        /^[A-Z][A-Za-z\.\s\(\)]{3,30}$/.test(line) &&
-        !line.includes('PASSPORT') &&
-        !line.includes('REPUBLIC') &&
-        !line.includes('GOVERNMENT') &&
-        !line.includes('IDENTITY') &&
-        !line.includes('DOCUMENT') &&
-        !line.includes('AUTHORITY') &&
-        !line.includes('SPECIMEN')
-      ) {
-        fields.push({
-          id: 'name-heuristic',
-          label: 'Candidate Subject Name',
-          value: line.trim(),
-          patternMatched: 'Heuristic title-cased name string without numbers',
-          category: 'name'
-        })
-        break
-      }
-    }
+  // 4. Candidate Subject Name Detection (Context-Aware Multi-Stage Extraction)
+  const candidateNameResult = parseCandidateSubjectName(lines, textRegions)
+  if (candidateNameResult) {
+    fields.push({
+      id: 'name-candidate',
+      label: candidateNameResult.confidenceTier === 'review'
+        ? 'Candidate Subject Name (Needs Review)'
+        : 'Candidate Subject Name',
+      value: candidateNameResult.value,
+      patternMatched: candidateNameResult.patternMatched,
+      category: 'name',
+      confidenceTier: candidateNameResult.confidenceTier,
+      contextNote: candidateNameResult.contextNote
+    })
   }
 
   // 5. Machine Readable Zone (MRZ) Detection

@@ -5,11 +5,13 @@ import {
   ShieldAlert,
   Check,
   Sliders,
-  Sparkles
+  Sparkles,
+  Scan
 } from 'lucide-react'
 import type {
   ScreeningReportData,
   ImageIntegrityResult,
+  DocumentLayoutResult,
   OCRResult,
   OCRStatus
 } from '../../types'
@@ -28,6 +30,7 @@ export interface ScreeningReportSectionProps {
   ocrStatus: OCRStatus
   ocrResult: OCRResult | null
   integrityResult: ImageIntegrityResult | null
+  layoutResult?: DocumentLayoutResult | null
   disabled?: boolean
 }
 
@@ -37,6 +40,7 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
   ocrStatus,
   ocrResult,
   integrityResult,
+  layoutResult,
   disabled = false
 }) => {
   const [includeFullOCR, setIncludeFullOCR] = useState(false)
@@ -60,6 +64,7 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
     ocrConfidence: ocrResult?.confidence,
     ocrResult: ocrResult || undefined,
     integrityResult,
+    layoutResult: layoutResult || undefined,
     privacySettings: {
       includeFullOCR,
       includeIdentifiableFields
@@ -238,11 +243,75 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
           </div>
         </div>
 
-        {/* SECTION D: PRELIMINARY ASSESSMENT & FINDINGS */}
+        {/* SECTION D: DOCUMENT BOUNDARY & LAYOUT ANALYSIS */}
+        {layoutResult && (
+          <div className="p-4 rounded-xl bg-white border border-slate-200/80 space-y-2.5 text-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                <Scan className="w-3.5 h-3.5 text-blue-600" />
+                <span>D. Document Boundary, Perspective &amp; Layout Analysis</span>
+              </div>
+              <Badge
+                variant={
+                  layoutResult.status === 'boundary-detected'
+                    ? 'success'
+                    : layoutResult.status === 'partial-boundary-detected'
+                    ? 'warning'
+                    : 'neutral'
+                }
+                size="sm"
+              >
+                {layoutResult.statusLabel} (Heuristic Score: {layoutResult.detectorScore}/100)
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px] pt-1">
+              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/60">
+                <span className="text-slate-400 uppercase font-mono text-[9px] block">Perimeter &amp; Geometry</span>
+                <span className="font-semibold text-slate-900 block mt-0.5">
+                  {layoutResult.geometry ? `${layoutResult.geometry.averageWidth} × ${layoutResult.geometry.averageHeight} px (${layoutResult.geometry.quadAspectRatio}:1)` : 'Perimeter Uncertain'}
+                </span>
+                <span className="text-slate-500 text-[10px] block mt-0.5">
+                  Coverage: {layoutResult.framing.areaCoveragePercent}% of raster
+                </span>
+              </div>
+
+              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/60">
+                <span className="text-slate-400 uppercase font-mono text-[9px] block">Perspective &amp; Skew</span>
+                <span className="font-semibold text-slate-900 block mt-0.5">
+                  {layoutResult.perspective ? `Keystone: ${layoutResult.perspective.apparentKeystoneRatio} • Tilt: ${layoutResult.perspective.rotationAngleDeg}°` : 'Perspective Unavailable'}
+                </span>
+                <span className="text-slate-500 text-[10px] block mt-0.5">
+                  {layoutResult.perspective?.isSeverePerspective ? 'Off-axis perspective' : 'Near-orthogonal alignment'}
+                </span>
+              </div>
+
+              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/60">
+                <span className="text-slate-400 uppercase font-mono text-[9px] block">Layout Containment</span>
+                <span className="font-semibold text-slate-900 block mt-0.5">
+                  {layoutResult.layoutQuality.containmentRatio !== null
+                    ? `${layoutResult.layoutQuality.containmentFormatted} text within boundary`
+                    : `Containment: ${layoutResult.layoutQuality.containmentFormatted}`}
+                </span>
+                <span className="text-slate-500 text-[10px] block mt-0.5">
+                  {layoutResult.layoutQuality.totalTextRegions > 0
+                    ? `${layoutResult.layoutQuality.regionsInsideBoundary}/${layoutResult.layoutQuality.totalTextRegions} text regions inside`
+                    : 'No OCR text regions available'}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-600 bg-slate-50/70 p-2.5 rounded-lg border border-slate-200/50 leading-relaxed">
+              {layoutResult.framing.assessmentNote}
+            </p>
+          </div>
+        )}
+
+        {/* SECTION E: PRELIMINARY ASSESSMENT & FINDINGS */}
         <div className="p-4 rounded-xl bg-slate-50/80 border border-slate-200/80 space-y-3">
           <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-800">
-              D. Preliminary Assessment
+              {layoutResult ? 'E. Preliminary Assessment' : 'D. Preliminary Assessment'}
             </span>
             <Badge
               variant={
@@ -282,11 +351,11 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
           </div>
         </div>
 
-        {/* SECTION E: INSTITUTIONAL LIMITATIONS & EVALUATION TRANSPARENCY */}
+        {/* SECTION F: INSTITUTIONAL LIMITATIONS & EVALUATION TRANSPARENCY */}
         <div className="p-4 bg-amber-50/60 rounded-xl border border-amber-200/80 text-[11px] text-amber-950 space-y-2">
           <div className="flex items-center gap-2 font-bold text-xs text-amber-900">
             <ShieldAlert className="w-4 h-4 text-amber-600 flex-shrink-0" />
-            <span>E. Institutional Limitations &amp; Ethical Boundaries</span>
+            <span>{layoutResult ? 'F. Institutional Limitations & Ethical Boundaries' : 'E. Institutional Limitations & Ethical Boundaries'}</span>
           </div>
           <ul className="list-disc list-inside space-y-1 text-amber-900/90 leading-relaxed">
             <li>
@@ -301,10 +370,13 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
             <li>
               <strong>No External Registry Connection:</strong> Document numbers have not been verified against government databases (e.g. UIDAI CIDR or NSDL).
             </li>
+            <li>
+              <strong>Boundary Estimates:</strong> Edge detection and perspective calculations are automated heuristics and do not certify physical edge integrity.
+            </li>
           </ul>
         </div>
 
-        {/* SECTION F: PRIVACY CONTROLS & EXPORT */}
+        {/* SECTION G: PRIVACY CONTROLS & EXPORT */}
         <div className="pt-3 border-t border-slate-200/80 space-y-3">
           <div className="p-3 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-2">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800">

@@ -335,18 +335,48 @@ export const OCRAnalysisSection: React.FC<OCRAnalysisSectionProps> = ({
                             {field.label}
                           </span>
                         </div>
-                        <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-slate-200/70 text-slate-600">
-                          {field.category}
-                        </span>
+                        {field.category === 'name' && field.confidenceTier ? (
+                          <span
+                            className={`text-[9px] uppercase font-mono px-1.5 py-0.5 rounded border font-semibold ${
+                              field.confidenceTier === 'confident'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80'
+                                : field.confidenceTier === 'review'
+                                ? 'bg-amber-50 text-amber-700 border-amber-200/80'
+                                : 'bg-slate-100 text-slate-600 border-slate-200/80'
+                            }`}
+                          >
+                            {field.confidenceTier === 'confident'
+                              ? 'Name Detected'
+                              : field.confidenceTier === 'review'
+                              ? 'Requires Review'
+                              : 'Not Confident'}
+                          </span>
+                        ) : (
+                          <span className="text-[9px] uppercase font-mono px-1.5 py-0.5 rounded bg-slate-200/70 text-slate-600">
+                            {field.category}
+                          </span>
+                        )}
                       </div>
 
-                      <div className="font-mono text-xs font-semibold text-slate-900 break-all bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/50">
+                      <div
+                        className={`font-mono text-xs font-semibold break-all bg-white px-2.5 py-1.5 rounded-lg border border-slate-200/50 ${
+                          field.value === 'Name not confidently detected'
+                            ? 'text-slate-500 italic font-normal'
+                            : 'text-slate-900'
+                        }`}
+                      >
                         {field.value}
                       </div>
 
                       <p className="text-[10px] text-slate-400 font-mono">
                         Rule: {field.patternMatched}
                       </p>
+
+                      {field.contextNote && (
+                        <p className="text-[10px] text-amber-700/90 bg-amber-50/50 px-2 py-1 rounded border border-amber-200/40">
+                          {field.contextNote}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>

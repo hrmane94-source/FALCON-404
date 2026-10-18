@@ -38,12 +38,21 @@ export const SYSTEM_STATUS_COMPONENTS: SystemComponentStatus[] = [
     techDetails: 'Canvas ELA & Metadata'
   },
   {
+    id: 'document-layout',
+    name: 'Boundary & Layout',
+    category: 'ai-engine',
+    status: 'available',
+    description: 'Client-side Sobel edge detection, perspective distortion, framing, and OCR layout containment active.',
+    phase: 'Phase 5',
+    techDetails: 'CV Edge & Geometry'
+  },
+  {
     id: 'face-verification',
     name: 'Face Verification',
     category: 'ai-engine',
     status: 'not-integrated',
-    description: 'Facial comparison models scheduled for Phase 5.',
-    phase: 'Phase 5',
+    description: 'Facial comparison and 1:1 biometric matching scheduled for Phase 6.',
+    phase: 'Phase 6',
     techDetails: 'Biometric Matching'
   }
 ]

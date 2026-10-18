@@ -21,16 +21,22 @@ import type {
   OCRResult,
   IntegrityAnalysisStatus,
   IntegrityProgress,
-  ImageIntegrityResult
+  ImageIntegrityResult,
+  LayoutAnalysisStatus,
+  LayoutProgress,
+  DocumentLayoutResult
 } from '../types'
 import { Card } from '../components/common/Card'
 import { Badge } from '../components/common/Badge'
 import { DocumentUploader } from '../components/upload/DocumentUploader'
 import { OCRAnalysisSection } from '../components/ocr/OCRAnalysisSection'
 import { ImageIntegritySection } from '../components/integrity/ImageIntegritySection'
+import { DocumentLayoutSection } from '../components/layout/DocumentLayoutSection'
+import { DocumentBoundaryOverlay } from '../components/layout/DocumentBoundaryOverlay'
 import { ScreeningReportSection } from '../components/report/ScreeningReportSection'
 import { performOCR } from '../services/ocrService'
 import { performImageIntegrityAnalysis } from '../services/imageIntegrityService'
+import { performDocumentLayoutAnalysis } from '../services/documentLayoutService'
 import { PROJECT_BRANDING } from '../constants/branding'
 
 export interface NewVerificationPageProps {
@@ -54,6 +60,12 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
   const [integrityResult, setIntegrityResult] = useState<ImageIntegrityResult | null>(null)
   const [integrityError, setIntegrityError] = useState<string | null>(null)
 
+  // Stage 04: Document Boundary & Layout state (Phase 5)
+  const [layoutStatus, setLayoutStatus] = useState<LayoutAnalysisStatus>('idle')
+  const [layoutProgress, setLayoutProgress] = useState<LayoutProgress | null>(null)
+  const [layoutResult, setLayoutResult] = useState<DocumentLayoutResult | null>(null)
+  const [layoutError, setLayoutError] = useState<string | null>(null)
+
   // Clean up Object URL on unmount to prevent memory leaks
   useEffect(() => {
     return () => {
@@ -72,6 +84,10 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
     setIntegrityProgress(null)
     setIntegrityResult(null)
     setIntegrityError(null)
+    setLayoutStatus('idle')
+    setLayoutProgress(null)
+    setLayoutResult(null)
+    setLayoutError(null)
   }
 
   const handleDocumentSelected = (doc: UploadedDocument) => {
@@ -93,8 +109,8 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
     setCurrentStep('upload')
   }
 
-  const handleRunOCR = async () => {
-    if (!uploadedDoc?.file) return
+  const handleRunOCR = async (): Promise<OCRResult | null> => {
+    if (!uploadedDoc?.file) return null
 
     setOcrStatus('initializing')
     setOcrError(null)
@@ -118,12 +134,28 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
 
       setOcrResult(result)
       setOcrStatus('success')
+
+      // If Stage 04 layout analysis was already executed prior to OCR, refresh spatial containment
+      if (layoutResult && uploadedDoc?.previewUrl) {
+        performDocumentLayoutAnalysis({
+          file: uploadedDoc.file,
+          previewUrl: uploadedDoc.previewUrl,
+          textRegions: result.textRegions
+        })
+          .then((newLayout) => {
+            setLayoutResult(newLayout)
+          })
+          .catch((e) => console.warn('Could not auto-refresh layout containment:', e))
+      }
+
+      return result
     } catch (err: any) {
       setOcrStatus('error')
       setOcrError(
         err?.message ||
           'Failed to execute Optical Character Recognition. Please check network connectivity and try again.'
       )
+      return null
     }
   }
 
@@ -157,17 +189,54 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
     }
   }
 
+  const handleRunLayout = async (passedOcr?: OCRResult | null) => {
+    if (!uploadedDoc?.file || !uploadedDoc.previewUrl) return null
+
+    setLayoutStatus('analyzing')
+    setLayoutError(null)
+    setLayoutProgress({
+      status: 'Analyzing document perimeter and corners...',
+      progress: 0.1,
+      stage: 'decoding'
+    })
+
+    try {
+      const activeOcr = passedOcr !== undefined ? passedOcr : ocrResult
+      const result = await performDocumentLayoutAnalysis({
+        file: uploadedDoc.file,
+        previewUrl: uploadedDoc.previewUrl,
+        textRegions: activeOcr?.textRegions,
+        onProgress: (prog) => {
+          setLayoutProgress(prog)
+        }
+      })
+
+      setLayoutResult(result)
+      setLayoutStatus('success')
+      return result
+    } catch (err: any) {
+      setLayoutStatus('error')
+      setLayoutError(
+        err?.message || 'Failed to complete document boundary and layout analysis.'
+      )
+      return null
+    }
+  }
+
   const handleRunCompleteScreening = async () => {
     if (!uploadedDoc?.file) return
+    let currentOcr = ocrResult
     if (ocrStatus !== 'success') {
-      await handleRunOCR()
+      currentOcr = await handleRunOCR()
     }
     await handleRunIntegrity()
+    await handleRunLayout(currentOcr)
   }
 
   const isOcrRunning = ocrStatus === 'initializing' || ocrStatus === 'recognizing'
   const isIntegrityRunning = integrityStatus === 'analyzing'
-  const isProcessing = isOcrRunning || isIntegrityRunning
+  const isLayoutRunning = layoutStatus === 'analyzing'
+  const isProcessing = isOcrRunning || isIntegrityRunning || isLayoutRunning
 
   const documentOptions: { type: DocumentType; label: string; description: string }[] = [
     {
@@ -204,30 +273,41 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
         iconBg: 'bg-blue-50 border-blue-200',
         title: isOcrRunning
           ? 'Running Stage 02: Optical Character Recognition (OCR)...'
-          : 'Running Stage 03: Image Integrity & Forensics...',
+          : isIntegrityRunning
+          ? 'Running Stage 03: Image Integrity & Forensics...'
+          : 'Running Stage 04: Document Boundary & Layout Analysis...',
         subtitle:
-          'Client-side WebAssembly worker is actively analyzing document glyphs and physical raster properties. Please wait.'
+          'Client-side algorithms are actively analyzing document glyphs, raster integrity, and boundary geometry. Please wait.'
+      }
+    }
+    if (integrityResult && ocrResult && layoutResult) {
+      return {
+        icon: <FileCheck2 className="w-4.5 h-4.5 text-emerald-600" />,
+        iconBg: 'bg-emerald-50 border-emerald-200',
+        title: 'Complete Document Screening Finalized',
+        subtitle:
+          'Client-side OCR transcription, image integrity checks, and document boundary/perspective analysis are complete. Review findings and download the dossier below.'
       }
     }
     if (integrityResult && ocrResult) {
       return {
         icon: <FileCheck2 className="w-4.5 h-4.5 text-emerald-600" />,
         iconBg: 'bg-emerald-50 border-emerald-200',
-        title: 'Preliminary Document Screening Completed',
+        title: 'OCR & Integrity Complete • Ready for Boundary Analysis',
         subtitle:
-          'Client-side OCR transcription and image integrity checks are complete. Review explainable findings and download the screening dossier below.'
+          'Client-side OCR transcription and image integrity checks are complete. Run Stage 04 below to evaluate boundary localization, perspective, and layout containment.'
       }
     }
     if (ocrStatus === 'success') {
       return {
         icon: <Sparkles className="w-4.5 h-4.5 text-purple-600" />,
         iconBg: 'bg-purple-50 border-purple-200',
-        title: 'OCR Complete • Stage 03 Integrity Analysis Ready',
+        title: 'OCR Complete • Stages 03 & 04 Ready',
         subtitle:
-          'Document characters have been extracted. Click "Run Image Integrity Analysis" below to evaluate raster exposure, blur, metadata headers, and Error Level Analysis (ELA).'
+          'Document characters have been extracted. Click "Run Full Screening" below to evaluate raster integrity, metadata, ELA, and document boundaries.'
       }
     }
-    if (ocrStatus === 'error' || integrityStatus === 'error') {
+    if (ocrStatus === 'error' || integrityStatus === 'error' || layoutStatus === 'error') {
       return {
         icon: <AlertTriangle className="w-4.5 h-4.5 text-rose-600" />,
         iconBg: 'bg-rose-50 border-rose-200',
@@ -241,7 +321,7 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
       iconBg: 'bg-blue-50 border-blue-200',
       title: 'Document Uploaded Successfully • Ready for Screening',
       subtitle:
-        'Your document file is validated in-memory. You can execute individual OCR and Image Integrity checks below or run a complete preliminary screening.'
+        'Your document file is validated in-memory. You can execute individual OCR, Integrity, and Boundary checks below or run a complete screening pass.'
     }
   }
 
@@ -257,11 +337,11 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
               New Verification
             </h2>
             <Badge variant="info" size="sm">
-              Phase 4: Preliminary Screening
+              Phase 5: Document Boundary &amp; Layout
             </Badge>
           </div>
           <p className="text-xs text-slate-500 mt-0.5">
-            Functional document intake, client-side OCR, image integrity analysis, and screening dossier.
+            Functional document intake, client-side OCR, image integrity analysis, boundary localization, and screening dossier.
           </p>
         </div>
 
@@ -450,16 +530,28 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
             }
           >
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-6 items-start">
-              {/* Image Preview */}
+              {/* Image Preview with Boundary Overlay */}
               <div className="sm:col-span-5 bg-slate-100 rounded-xl p-3 border border-slate-200/80 flex flex-col items-center justify-center">
-                <img
-                  src={uploadedDoc.previewUrl}
-                  alt={uploadedDoc.name}
-                  className="max-h-64 w-auto object-contain rounded-lg shadow-2xs"
-                />
-                <span className="text-[10px] text-slate-400 font-mono mt-2">
-                  Client-side Raster Preview
-                </span>
+                <div className="relative max-h-64 w-full flex items-center justify-center rounded-lg overflow-hidden border border-slate-200/70 bg-slate-900/5">
+                  <img
+                    src={uploadedDoc.previewUrl}
+                    alt={uploadedDoc.name}
+                    className="max-h-64 w-auto object-contain rounded-lg shadow-2xs"
+                  />
+                  {layoutResult && (
+                    <DocumentBoundaryOverlay
+                      layoutResult={layoutResult}
+                      imageWidth={uploadedDoc.dimensions?.width}
+                      imageHeight={uploadedDoc.dimensions?.height}
+                    />
+                  )}
+                </div>
+                <div className="flex items-center justify-between w-full mt-2 text-[10px] text-slate-400 font-mono">
+                  <span>Raster Preview</span>
+                  {layoutResult && (
+                    <span className="text-blue-600 font-medium">Overlay: {layoutResult.statusLabel}</span>
+                  )}
+                </div>
               </div>
 
               {/* Data Breakdown */}
@@ -576,6 +668,17 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
             onRetryAnalysis={handleRunIntegrity}
           />
 
+          {/* STAGE 04: Document Boundary, Perspective, and Layout Section */}
+          <DocumentLayoutSection
+            status={layoutStatus}
+            progress={layoutProgress}
+            result={layoutResult}
+            error={layoutError}
+            disabled={isProcessing}
+            onRunAnalysis={() => handleRunLayout()}
+            onRetryAnalysis={() => handleRunLayout()}
+          />
+
           {/* PRELIMINARY SCREENING REPORT (Appears when integrity analysis has executed) */}
           {integrityResult && (
             <ScreeningReportSection
@@ -584,6 +687,7 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
               ocrStatus={ocrStatus}
               ocrResult={ocrResult}
               integrityResult={integrityResult}
+              layoutResult={layoutResult}
               disabled={isProcessing}
             />
           )}

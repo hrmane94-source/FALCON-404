@@ -81,6 +81,9 @@ export function maskCandidateFieldValue(field: { category: string; value: string
       return `${maskedPart}${last4}`
     }
     case 'name': {
+      if (val === 'Name not confidently detected') {
+        return val
+      }
       return maskCandidateName(val)
     }
     case 'date': {
@@ -111,7 +114,7 @@ export function generateScreeningReportJson(report: ScreeningReportData): string
       projectName: PROJECT_BRANDING.projectName,
       developer: PROJECT_BRANDING.developerName,
       systemName: PROJECT_BRANDING.projectFullName,
-      phase: 'Phase 4: Image Integrity & Preliminary Screening',
+      phase: 'Phase 5: Document Boundary, Perspective & Layout Assessment',
       generatedAt: report.generatedAt,
       engineVersion: PROJECT_BRANDING.version
     },
@@ -142,7 +145,9 @@ export function generateScreeningReportJson(report: ScreeningReportData): string
           label: f.label,
           value: processedValue,
           masked: isActuallyMasked,
-          patternMatched: f.patternMatched
+          patternMatched: f.patternMatched,
+          confidenceTier: f.confidenceTier,
+          contextNote: f.contextNote
         }
       }),
       rawOcrText: report.privacySettings.includeFullOCR
@@ -185,6 +190,64 @@ export function generateScreeningReportJson(report: ScreeningReportData): string
       highVarianceAreaRatio: `${Math.round(report.integrityResult.ela.variance * 100)}%`,
       assessmentNote: report.integrityResult.ela.assessmentNote
     },
+    documentBoundaryAndLayout: report.layoutResult
+      ? {
+          status: report.layoutResult.status,
+          statusLabel: report.layoutResult.statusLabel,
+          detectorScore: `${report.layoutResult.detectorScore} / 100`,
+          scoreDefinition: report.layoutResult.scoreDefinition,
+          geometry: report.layoutResult.geometry
+            ? {
+                dimensions: `${report.layoutResult.geometry.averageWidth} × ${report.layoutResult.geometry.averageHeight} px`,
+                aspectRatio: `${report.layoutResult.geometry.quadAspectRatio}:1`,
+                areaPixels: report.layoutResult.geometry.quadAreaPixels,
+                areaCoverage: `${Math.round(report.layoutResult.geometry.areaCoverageRatio * 100)}% of frame`,
+                corners: report.layoutResult.geometry.corners,
+                normalizedCorners: report.layoutResult.geometry.normalizedCorners
+              }
+            : 'Boundary coordinates unavailable',
+          perspective: report.layoutResult.perspective
+            ? {
+                rotationAngleDeg: `${report.layoutResult.perspective.rotationAngleDeg}°`,
+                apparentKeystoneRatio: report.layoutResult.perspective.apparentKeystoneRatio,
+                horizontalSkewRatio: report.layoutResult.perspective.horizontalSkewRatio,
+                verticalSkewRatio: report.layoutResult.perspective.verticalSkewRatio,
+                isSeverePerspective: report.layoutResult.perspective.isSeverePerspective,
+                isRotated: report.layoutResult.perspective.isRotated,
+                cornerAnglesDeg: report.layoutResult.perspective.cornerAnglesDeg,
+                observation: report.layoutResult.perspective.observation
+              }
+            : 'Perspective metrics unavailable',
+          framing: {
+            status: report.layoutResult.framing.status,
+            statusLabel: report.layoutResult.framing.statusLabel,
+            minMarginPx: `${report.layoutResult.framing.minMarginPx} px`,
+            marginsPx: report.layoutResult.framing.marginsPx,
+            areaCoveragePercent: `${report.layoutResult.framing.areaCoveragePercent}%`,
+            assessmentNote: report.layoutResult.framing.assessmentNote
+          },
+          layoutQuality: {
+            status: report.layoutResult.layoutQuality.status,
+            statusLabel: report.layoutResult.layoutQuality.statusLabel,
+            performed: report.layoutResult.layoutQuality.performed,
+            totalTextRegions: report.layoutResult.layoutQuality.totalTextRegions,
+            regionsInsideBoundary: report.layoutResult.layoutQuality.regionsInsideBoundary,
+            regionsOutsideBoundary: report.layoutResult.layoutQuality.regionsOutsideBoundary,
+            containmentRatio: report.layoutResult.layoutQuality.containmentRatio !== null
+              ? `${Math.round(report.layoutResult.layoutQuality.containmentRatio * 100)}%`
+              : null,
+            containmentFormatted: report.layoutResult.layoutQuality.containmentFormatted,
+            isLayoutConsistent: report.layoutResult.layoutQuality.isLayoutConsistent,
+            isBoundaryReliable: report.layoutResult.layoutQuality.isBoundaryReliable,
+            assessmentNote: report.layoutResult.layoutQuality.layoutAssessmentNote
+          },
+          findings: report.layoutResult.findings
+        }
+      : {
+          status: 'skipped',
+          statusLabel: 'Not Executed',
+          note: 'Document boundary and layout analysis was not executed for this dossier.'
+        },
     explainableFindings: report.integrityResult.findings.map((f) => ({
       id: f.id,
       title: f.title,
@@ -211,6 +274,7 @@ export function generateScreeningReportJson(report: ScreeningReportData): string
       'OCR extracts text glyphs and does not authenticate citizenship, identity records, or document issuance.',
       'Image quality metrics and Error Level Analysis (ELA) indicate potential compression anomalies and do NOT prove or disprove fraud.',
       'Missing camera metadata or EXIF headers is common across digital scans and message apps; it does not indicate fraud.',
+      'Document boundary detection and perspective analysis are computer-vision heuristics and do not certify physical edge integrity.',
       'No external government registry lookups or live biometric 1:1 face verifications were performed.'
     ]
   }
@@ -321,14 +385,45 @@ export function generateScreeningReportText(report: ScreeningReportData): string
     ''
   )
 
+  if (report.layoutResult) {
+    const lay = report.layoutResult
+    lines.push(
+      '--------------------------------------------------------------------------------',
+      ' 6. DOCUMENT BOUNDARY, PERSPECTIVE & LAYOUT AUDIT (STAGE 04)',
+      '--------------------------------------------------------------------------------',
+      `Detector Status  : ${lay.statusLabel} [Heuristic Score: ${lay.detectorScore}/100]`,
+      `Estimated Bounds : ${lay.geometry ? `${lay.geometry.averageWidth} × ${lay.geometry.averageHeight} px (${lay.geometry.quadAspectRatio}:1 ratio, ${Math.round(lay.geometry.areaCoverageRatio * 100)}% coverage)` : 'Perimeter Uncertain'}`,
+      `In-Plane Tilt    : ${lay.perspective ? `${lay.perspective.rotationAngleDeg}° (${lay.perspective.isRotated ? 'Tilt Detected' : 'Level'})` : 'N/A'}`,
+      `Perspective Skew : ${lay.perspective ? `Keystone: ${lay.perspective.apparentKeystoneRatio} (Horiz: ${lay.perspective.horizontalSkewRatio}, Vert: ${lay.perspective.verticalSkewRatio})` : 'N/A'}`,
+      `Corner Angles    : ${lay.perspective ? `TL: ${lay.perspective.cornerAnglesDeg.topLeft}° | TR: ${lay.perspective.cornerAnglesDeg.topRight}° | BR: ${lay.perspective.cornerAnglesDeg.bottomRight}° | BL: ${lay.perspective.cornerAnglesDeg.bottomLeft}°` : 'N/A'}`,
+      `Framing Clearance: ${lay.framing.statusLabel} (Min margin: ${lay.framing.minMarginPx} px, T:${lay.framing.marginsPx.top} R:${lay.framing.marginsPx.right} B:${lay.framing.marginsPx.bottom} L:${lay.framing.marginsPx.left})`,
+      `Text Containment : ${
+        !lay.layoutQuality.performed || lay.layoutQuality.totalTextRegions === 0
+          ? 'N/A (No OCR text regions available for spatial containment analysis)'
+          : lay.layoutQuality.status === 'uncertain-boundary'
+          ? `N/A (Uncertain boundary - ${lay.layoutQuality.regionsInsideBoundary}/${lay.layoutQuality.totalTextRegions} tentative text regions inside)`
+          : lay.layoutQuality.containmentRatio !== null
+          ? `${Math.round(lay.layoutQuality.containmentRatio * 100)}% (${lay.layoutQuality.regionsInsideBoundary}/${lay.layoutQuality.totalTextRegions} text boxes inside)`
+          : 'N/A'
+      }`,
+      `Audit Remarks    : ${lay.framing.assessmentNote}`,
+      ''
+    )
+  }
+
+  const allFindings = [
+    ...report.integrityResult.findings,
+    ...(report.layoutResult?.findings || [])
+  ]
+
   lines.push(
     '--------------------------------------------------------------------------------',
-    ' 6. EXPLAINABLE SCREENING FINDINGS',
+    ` ${report.layoutResult ? '7' : '6'}. EXPLAINABLE SCREENING FINDINGS (${allFindings.length} Total Indicators)`,
     '--------------------------------------------------------------------------------'
   )
 
-  for (let i = 0; i < report.integrityResult.findings.length; i++) {
-    const f = report.integrityResult.findings[i]
+  for (let i = 0; i < allFindings.length; i++) {
+    const f = allFindings[i]
     lines.push(`[${i + 1}] ${f.title} (${f.severity.toUpperCase()} • ${f.category})`)
     lines.push(`    Metric      : ${f.metricName} = ${f.measuredValue} ${f.threshold ? `(Ref: ${f.threshold})` : ''}`)
     lines.push(`    Observation : ${f.observation}`)
@@ -343,7 +438,7 @@ export function generateScreeningReportText(report: ScreeningReportData): string
 
   lines.push(
     '--------------------------------------------------------------------------------',
-    ' 7. INSTITUTIONAL EVALUATION LIMITATIONS & PRIVACY NOTICE',
+    ` ${report.layoutResult ? '8' : '7'}. INSTITUTIONAL EVALUATION LIMITATIONS & PRIVACY NOTICE`,
     '--------------------------------------------------------------------------------',
     '1. Client-Side Execution: All evaluations occurred strictly within browser memory.',
     '   No raster images or identity records were transmitted to external servers.',
@@ -351,6 +446,8 @@ export function generateScreeningReportText(report: ScreeningReportData): string
     '   compression anomalies. They do NOT certify genuine issuance or detect identity theft.',
     '3. Scheduled Phases: Physical microprint examination, digital copy-move splicing,',
     '   and 1:1 facial biometric matching are staged for subsequent project phases.',
+    '4. Boundary & Layout Heuristics: Four-corner boundary estimates and perspective',
+    '   calculations are computer-vision approximations and do not guarantee edge integrity.',
     '--------------------------------------------------------------------------------',
     `                 ${PROJECT_BRANDING.projectDeveloperCredit}`,
     '================================================================================',

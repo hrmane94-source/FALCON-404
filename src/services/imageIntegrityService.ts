@@ -354,7 +354,7 @@ export function analyzeImageQuality(
 
   const physicalRatioMeasured = false
   const physicalRatioNote =
-    'Physical document boundary detection is not implemented in this phase. The calculated ratio represents the full uploaded image raster (including any background, perspective, or margins), not the physical credential boundaries.'
+    'Raster dimensions and aspect ratio describe the complete uploaded image. Phase 5 estimates a document boundary and quadrilateral region when detectable; estimated boundaries have distinct measurements, may be uncertain, and do not prove physical document authenticity.'
 
   const isLowResolution = width < INTEGRITY_THRESHOLDS.MIN_WIDTH_PX || height < INTEGRITY_THRESHOLDS.MIN_HEIGHT_PX
   const isExtremeLuminance =
@@ -552,7 +552,7 @@ export function buildExplainableFindings(
       measuredValue: `${quality.width} × ${quality.height} px (${quality.aspectRatioLabel})`,
       threshold: `≥ ${INTEGRITY_THRESHOLDS.MIN_WIDTH_PX} × ${INTEGRITY_THRESHOLDS.MIN_HEIGHT_PX} px`,
       observation: `Raster dimensions meet minimum resolution parameters for optical character parsing. Aspect ratio (${quality.aspectRatio}:1) reflects uploaded raster framing.`,
-      explanation: 'Pixel density is adequate for character edge separation. Note: Physical document boundary ratio has not been measured.',
+      explanation: 'Pixel density is adequate for character edge separation. Note: Raster aspect ratio describes the full capture frame; document region geometry is estimated separately in Stage 04.',
       importance: 'Supports reliable OCR transcription.',
       recommendation: 'Proceed with optical field review.'
     })

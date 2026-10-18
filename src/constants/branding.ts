@@ -13,5 +13,5 @@ export const PROJECT_BRANDING = {
   projectDeveloperCredit: 'FALCON-404 · Developed by Harshad Mane',
   challengeName: 'Seva First Innovation Challenge 2026',
   systemTagline: 'AI-Based Fake Identity & Document Screening System',
-  version: 'FALCON-404 v0.4'
+  version: 'FALCON-404 v0.5'
 } as const

@@ -5,7 +5,7 @@
  */
 
 import type { ScreeningReportData } from '../types'
-import { PROJECT_BRANDING } from '../constants/branding'
+import { PROJECT_BRANDING } from '../constants/branding.ts'
 
 /**
  * Safely anonymizes a candidate person's name for export.

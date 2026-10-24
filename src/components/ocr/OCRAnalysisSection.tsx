@@ -15,11 +15,15 @@ import {
   CreditCard,
   Binary,
   FileQuestion,
-  Terminal
+  Terminal,
+  Edit2,
+  Eye,
+  EyeOff,
+  X
 } from 'lucide-react'
 import type { OCRProgress, OCRResult, OCRStatus, CandidateCategory } from '../../types'
-import { Card } from '../common/Card'
-import { Badge } from '../common/Badge'
+import { Card } from '../common/Card.tsx'
+import { Badge } from '../common/Badge.tsx'
 
 export interface OCRAnalysisSectionProps {
   ocrStatus: OCRStatus
@@ -29,6 +33,7 @@ export interface OCRAnalysisSectionProps {
   disabled?: boolean
   onRunOCR: () => void
   onRetryOCR: () => void
+  onUpdateField?: (fieldId: string, newValue: string) => void
 }
 
 export const OCRAnalysisSection: React.FC<OCRAnalysisSectionProps> = ({
@@ -38,9 +43,13 @@ export const OCRAnalysisSection: React.FC<OCRAnalysisSectionProps> = ({
   ocrError,
   disabled = false,
   onRunOCR,
-  onRetryOCR
+  onRetryOCR,
+  onUpdateField
 }) => {
   const [copied, setCopied] = useState(false)
+  const [editingFieldId, setEditingFieldId] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState<string>('')
+  const [maskedFields, setMaskedFields] = useState<Record<string, boolean>>({})
 
   const handleCopyText = async (text: string) => {
     try {
@@ -50,6 +59,44 @@ export const OCRAnalysisSection: React.FC<OCRAnalysisSectionProps> = ({
     } catch {
       // Fallback
     }
+  }
+
+  const toggleMask = (fieldId: string) => {
+    setMaskedFields((prev) => {
+      const currentMasked = prev[fieldId] !== false // Default is true (masked)
+      return {
+        ...prev,
+        [fieldId]: !currentMasked
+      }
+    })
+  }
+
+  const startEditing = (fieldId: string, currentValue: string) => {
+    setEditingFieldId(fieldId)
+    setEditValue(currentValue)
+  }
+
+  const cancelEditing = () => {
+    setEditingFieldId(null)
+    setEditValue('')
+  }
+
+  const saveEditing = (fieldId: string) => {
+    if (onUpdateField && editValue.trim()) {
+      onUpdateField(fieldId, editValue.trim())
+    }
+    setEditingFieldId(null)
+  }
+
+  const maskValue = (category: CandidateCategory, val: string) => {
+    if (category === 'identifier' && val.length > 4) {
+      const clean = val.replace(/\s+/g, '')
+      if (clean.length === 12) {
+        return `•••• •••• ${clean.slice(-4)}`
+      }
+      return `${'•'.repeat(Math.max(4, clean.length - 4))}${clean.slice(-4)}`
+    }
+    return val
   }
 
   const getCategoryIcon = (category: CandidateCategory) => {
@@ -352,15 +399,72 @@ export const OCRAnalysisSection: React.FC<OCRAnalysisSectionProps> = ({
                         )}
                       </div>
 
-                      <div
-                        className={`font-mono text-xs font-bold break-all bg-white dark:bg-slate-900 px-3 py-2 rounded border border-slate-200/60 dark:border-slate-800 ${
-                          field.value === 'Name not confidently detected'
-                            ? 'text-slate-500 dark:text-slate-400 italic font-normal'
-                            : 'text-slate-900 dark:text-slate-100'
-                        }`}
-                      >
-                        {field.value}
-                      </div>
+                      {editingFieldId === field.id ? (
+                        <div className="flex items-center gap-1.5 font-mono">
+                          <input
+                            type="text"
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            className="flex-1 bg-white dark:bg-slate-900 px-2 py-1.5 text-xs font-mono font-bold text-slate-900 dark:text-slate-100 border border-orange-500 rounded focus:outline-hidden"
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={() => saveEditing(field.id)}
+                            className="p-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                            title="Save corrected value"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEditing}
+                            className="p-1.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-300 cursor-pointer"
+                            title="Cancel editing"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between gap-2 bg-white dark:bg-slate-900 px-3 py-2 rounded border border-slate-200/60 dark:border-slate-800">
+                          <div
+                            className={`font-mono text-xs font-bold break-all flex-1 ${
+                              field.value === 'Name not confidently detected'
+                                ? 'text-slate-500 dark:text-slate-400 italic font-normal'
+                                : 'text-slate-900 dark:text-slate-100'
+                            }`}
+                          >
+                            {(maskedFields[field.id] !== false) && field.category === 'identifier'
+                              ? maskValue(field.category, field.value)
+                              : field.value}
+                          </div>
+
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {field.category === 'identifier' && field.value.length > 4 && (
+                              <button
+                                type="button"
+                                onClick={() => toggleMask(field.id)}
+                                className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                                title={(maskedFields[field.id] !== false) ? 'Unmask sensitive identifier' : 'Mask sensitive characters'}
+                              >
+                                {(maskedFields[field.id] !== false) ? (
+                                  <Eye className="w-3.5 h-3.5" />
+                                ) : (
+                                  <EyeOff className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => startEditing(field.id, field.value)}
+                              className="p-1 rounded text-slate-400 hover:text-orange-500 cursor-pointer"
+                              title="Edit / correct this OCR field value"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 dark:text-slate-500">
                         <span>RULE // {field.patternMatched}</span>

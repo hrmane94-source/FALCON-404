@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import {
   Check,
   ArrowRight,
@@ -26,7 +26,10 @@ import type {
   LayoutAnalysisStatus,
   LayoutProgress,
   DocumentLayoutResult,
-  ScreeningReportData
+  ScreeningReportData,
+  SupportedDocumentType,
+  ExtractedDocumentField,
+  WorkflowScreeningDossier
 } from '../types'
 import { Card } from '../components/common/Card'
 import { Badge } from '../components/common/Badge'
@@ -36,12 +39,17 @@ import { ImageIntegritySection } from '../components/integrity/ImageIntegritySec
 import { DocumentLayoutSection } from '../components/layout/DocumentLayoutSection'
 import { DocumentBoundaryOverlay } from '../components/layout/DocumentBoundaryOverlay'
 import { ScreeningReportSection } from '../components/report/ScreeningReportSection'
+import { DocumentIdentifierValidationSection } from '../components/validation/DocumentIdentifierValidationSection'
+import { VerificationSummaryPanel } from '../components/validation/VerificationSummaryPanel'
 import { performOCR } from '../services/ocrService'
 import { performImageIntegrityAnalysis } from '../services/imageIntegrityService'
 import { performDocumentLayoutAnalysis } from '../services/documentLayoutService'
+import { orchestrateScreeningVerification } from '../services/verificationEngine'
+import { mapSupportedToLegacyDocumentType } from '../constants/documentTypes'
 import { PROJECT_BRANDING } from '../constants/branding'
 import { useCases } from '../context/CaseContext'
 import { buildSavedCaseRecord } from '../services/caseStorageService'
+import { maskCandidateFieldValue } from '../utils/reportExport'
 
 export interface NewVerificationPageProps {
   onNavigate: (section: NavigationSection) => void
@@ -53,7 +61,10 @@ const generateCaseReference = () =>
 export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavigate }) => {
   const { saveCase, stationId } = useCases()
   const [currentStep, setCurrentStep] = useState<'upload' | 'review'>('upload')
+  const [selectedSupportedDocType, setSelectedSupportedDocType] = useState<SupportedDocumentType>('Aadhaar')
   const [selectedDocType, setSelectedDocType] = useState<DocumentType>('National ID')
+  const [docTypeSelectionMode, setDocTypeSelectionMode] = useState<'manual' | 'ocr-inferred'>('manual')
+  const [customizedFields, setCustomizedFields] = useState<Record<string, string>>({})
   const [uploadedDoc, setUploadedDoc] = useState<UploadedDocument | null>(null)
 
   // Unique screening session & case reference
@@ -80,6 +91,19 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
   const [layoutResult, setLayoutResult] = useState<DocumentLayoutResult | null>(null)
   const [layoutError, setLayoutError] = useState<string | null>(null)
 
+  const handleSelectDocType = (type: SupportedDocumentType, mode: 'manual' | 'ocr-inferred' = 'manual') => {
+    setSelectedSupportedDocType(type)
+    setSelectedDocType(mapSupportedToLegacyDocumentType(type))
+    setDocTypeSelectionMode(mode)
+  }
+
+  const handleUpdateField = (fieldId: string, newValue: string) => {
+    setCustomizedFields((prev) => ({
+      ...prev,
+      [fieldId]: newValue
+    }))
+  }
+
   // Clean up Object URL on unmount to prevent memory leaks
   useEffect(() => {
     return () => {
@@ -104,6 +128,7 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
     setLayoutError(null)
     setAutoSaveStatus('idle')
     setAutoSaveError(null)
+    setCustomizedFields({})
     savedSessionRef.current = null
   }
 
@@ -304,38 +329,85 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
   const isLayoutRunning = layoutStatus === 'analyzing'
   const isProcessing = isOcrRunning || isIntegrityRunning || isLayoutRunning
 
-  const documentOptions: { type: DocumentType; label: string; description: string; code: string }[] = [
+  const documentOptions: {
+    type: SupportedDocumentType
+    code: string
+    label: string
+    description: string
+  }[] = [
     {
-      type: 'National ID',
-      code: 'STD // NID',
-      label: 'National ID / Aadhaar',
-      description: 'Standard national identity card with text and QR format.'
+      type: 'Aadhaar',
+      code: 'IN // UID',
+      label: 'Aadhaar (UIDAI)',
+      description: '12-digit Indian national identity credential with QR and text format.'
+    },
+    {
+      type: 'PAN',
+      code: 'IN // PAN',
+      label: 'Permanent Account Number (PAN)',
+      description: '10-character alphanumeric tax identity card issued by Income Tax Dept.'
+    },
+    {
+      type: 'Driving Licence',
+      code: 'IN // DLN',
+      label: 'Indian Driving Licence (SARATHI)',
+      description: 'State/Union territory motor vehicle operating authorization credential.'
     },
     {
       type: 'Passport',
-      code: 'STD // PPT',
-      label: 'Passport',
-      description: 'Standard travel document with photo page and MRZ lines.'
+      code: 'ICAO // PPT',
+      label: 'Passport (ICAO 9303)',
+      description: 'Standard travel document with photo bio-data and 2-line machine readable zone.'
     },
     {
-      type: "Driver's License",
-      code: 'STD // DLN',
-      label: "Driver's License",
-      description: 'Motor vehicle operating credential format.'
-    },
-    {
-      type: 'Voter ID',
-      code: 'STD // VID',
-      label: 'Voter ID',
-      description: 'Electoral photo identity credential.'
-    },
-    {
-      type: 'PAN Card',
-      code: 'STD // PAN',
-      label: 'PAN Card',
-      description: 'Tax identification account card format.'
+      type: 'Other / Unknown',
+      code: 'GEN // UNK',
+      label: 'Generic / Other Document',
+      description: 'Unspecified identity document or unrecognized credential format.'
     }
   ]
+
+  const workflowDossier: WorkflowScreeningDossier | null = useMemo(() => {
+    if (!uploadedDoc) return null
+
+    // Map candidate fields from OCR, merging customized overrides
+    const fields: ExtractedDocumentField[] = (ocrResult?.candidateFields || []).map((cf, idx) => {
+      const fieldId = `field_${idx}_${cf.category}`
+      const rawValue = customizedFields[fieldId] !== undefined ? customizedFields[fieldId] : cf.value
+      const isOverridden = customizedFields[fieldId] !== undefined && customizedFields[fieldId] !== cf.value
+      return {
+        fieldName: cf.category || 'unknown',
+        label: cf.label,
+        value: rawValue,
+        rawOcrValue: cf.value,
+        confidence: ocrResult?.confidence,
+        extractionStatus: 'extracted',
+        isManuallyCorrected: isOverridden,
+        originalExtractedValue: isOverridden ? maskCandidateFieldValue(cf) : undefined,
+        category: cf.category
+      }
+    })
+
+    return orchestrateScreeningVerification({
+      sessionReference: caseReference,
+      documentName: uploadedDoc.name,
+      selectedDocumentType: selectedSupportedDocType,
+      documentTypeSelectionMode: docTypeSelectionMode,
+      detectedDocumentType: ocrResult?.candidateFields.find((f) => f.category === 'document-type')?.value,
+      extractedFields: fields,
+      integrityResult: integrityResult || undefined,
+      layoutResult: layoutResult || undefined,
+      ocrConfidence: ocrResult?.confidence
+    })
+  }, [
+    uploadedDoc,
+    selectedSupportedDocType,
+    ocrResult,
+    customizedFields,
+    integrityResult,
+    layoutResult,
+    caseReference
+  ])
 
   const getStep2BannerContent = () => {
     if (isProcessing) {
@@ -458,12 +530,12 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 font-mono">
               {documentOptions.map((item) => {
-                const isSelected = selectedDocType === item.type
+                const isSelected = selectedSupportedDocType === item.type
                 return (
                   <button
                     key={item.type}
                     type="button"
-                    onClick={() => setSelectedDocType(item.type)}
+                    onClick={() => handleSelectDocType(item.type, 'manual')}
                     className={`p-3.5 rounded-lg border text-left transition-all cursor-pointer ${
                       isSelected
                         ? 'border-orange-500 bg-orange-500/10 ring-1 ring-orange-500'
@@ -628,10 +700,26 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
               <div className="sm:col-span-7 space-y-3 text-xs">
                 <div className="grid grid-cols-2 gap-2.5">
                   <div className="p-3 bg-slate-50 dark:bg-slate-950/60 rounded border border-slate-200/60 dark:border-slate-800">
-                    <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-0.5">
-                      STANDARD
-                    </span>
-                    <span className="font-bold text-slate-900 dark:text-slate-100">{selectedDocType}</span>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                        STANDARD
+                      </span>
+                      <span className="text-[9px] font-mono text-orange-500 font-bold uppercase">
+                        {docTypeSelectionMode === 'manual' ? 'MANUAL' : 'INFERRED'}
+                      </span>
+                    </div>
+                    <select
+                      value={selectedSupportedDocType}
+                      disabled={isProcessing}
+                      onChange={(e) => handleSelectDocType(e.target.value as SupportedDocumentType, 'manual')}
+                      className="w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-xs font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-orange-500 cursor-pointer"
+                    >
+                      {documentOptions.map((opt) => (
+                        <option key={opt.type} value={opt.type}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div className="p-3 bg-slate-50 dark:bg-slate-950/60 rounded border border-slate-200/60 dark:border-slate-800">
@@ -725,6 +813,7 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
             disabled={isProcessing}
             onRunOCR={handleRunOCR}
             onRetryOCR={handleRunOCR}
+            onUpdateField={handleUpdateField}
           />
 
           {/* STAGE 03: Image Integrity, Quality, and ELA Section */}
@@ -748,6 +837,27 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
             onRunAnalysis={() => handleRunLayout()}
             onRetryAnalysis={() => handleRunLayout()}
           />
+
+          {/* STAGE 04-B: Deterministic Identifier Validation Section */}
+          {workflowDossier && (
+            <DocumentIdentifierValidationSection
+              documentType={selectedSupportedDocType}
+              extractedIdentifierField={workflowDossier.extractedFields.find(
+                (f) => f.category === 'identifier' || f.fieldName === 'identifier'
+              )}
+              validationResults={workflowDossier.identifierValidationResults}
+              disabled={isProcessing}
+            />
+          )}
+
+          {/* STAGE 05-A: Comprehensive Multi-Dimension Verification Summary */}
+          {workflowDossier && (
+            <VerificationSummaryPanel
+              documentType={selectedSupportedDocType}
+              summary={workflowDossier.verificationSummary}
+              allValidationChecks={workflowDossier.identifierValidationResults}
+            />
+          )}
 
           {/* AUTO-SAVE CONFIRMATION & NOTIFICATION BANNER */}
           {autoSaveStatus === 'saved' && (
@@ -807,6 +917,7 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
               ocrResult={ocrResult}
               integrityResult={integrityResult}
               layoutResult={layoutResult}
+              workflowDossier={workflowDossier}
               disabled={isProcessing}
               reportId={caseReference}
               autoSaveStatus={autoSaveStatus}

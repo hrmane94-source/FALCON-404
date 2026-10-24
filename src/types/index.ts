@@ -352,4 +352,9 @@ export interface LayoutProgress {
   stage?: 'decoding' | 'edges' | 'quadrilateral' | 'perspective' | 'layout' | 'complete'
 }
 
+// ==========================================
+// Phase 7.1: Verification Workflow Contracts
+// ==========================================
+export * from './verificationWorkflow.ts'
+
 

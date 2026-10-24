@@ -16,7 +16,8 @@ import type {
   ImageIntegrityResult,
   DocumentLayoutResult,
   OCRResult,
-  OCRStatus
+  OCRStatus,
+  WorkflowScreeningDossier
 } from '../../types'
 import { Card } from '../common/Card'
 import { Badge } from '../common/Badge'
@@ -36,6 +37,7 @@ export interface ScreeningReportSectionProps {
   ocrResult: OCRResult | null
   integrityResult: ImageIntegrityResult | null
   layoutResult?: DocumentLayoutResult | null
+  workflowDossier?: WorkflowScreeningDossier | null
   disabled?: boolean
   reportId?: string
   autoSaveStatus?: 'idle' | 'saving' | 'saved' | 'error'
@@ -50,6 +52,7 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
   ocrResult,
   integrityResult,
   layoutResult,
+  workflowDossier,
   disabled = false,
   reportId: passedReportId,
   autoSaveStatus = 'idle',
@@ -379,7 +382,66 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
           </div>
         </div>
 
-        {/* SECTION F: LIMITATIONS */}
+        {/* SECTION F: IDENTIFIER VALIDATION & VERIFICATION BREAKDOWN */}
+        {workflowDossier && (
+          <div className="p-4 rounded-lg bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 space-y-3 font-mono">
+            <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800 pb-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                SECTION F // IDENTIFIER VALIDATION &amp; SCOPE BREAKDOWN
+              </span>
+              <Badge variant="neutral" size="sm">
+                STEP 1 // BASELINE
+              </Badge>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400">
+                <span>TARGET DOCUMENT CATEGORY:</span>
+                <strong className="text-slate-900 dark:text-slate-100">{workflowDossier.selectedDocumentType}</strong>
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400">
+                <span>DETERMINISTIC IDENTIFIER CHECKS:</span>
+                <span className="text-amber-600 dark:text-amber-400 font-bold">
+                  {workflowDossier.verificationSummary.unimplementedChecks} NOT IMPLEMENTED (STEP 2 SCHEDULED)
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400">
+                <span>ISSUER REGISTRY VERIFICATION:</span>
+                <span className="text-slate-500 font-bold">UNAVAILABLE (NO LIVE GATEWAY)</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800 text-[10px] font-sans">
+              <div className="p-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
+                <strong className="text-emerald-700 dark:text-emerald-400 font-mono uppercase block">
+                  ✓ WHAT THE SYSTEM VERIFIED:
+                </strong>
+                <ul className="list-disc list-inside text-slate-600 dark:text-slate-300 space-y-0.5">
+                  <li>Client-side OCR transcription &amp; candidate field detection</li>
+                  <li>Image exposure, contrast, and Laplacian blur score</li>
+                  <li>Metadata container (EXIF/JFIF/software markers)</li>
+                  <li>JPEG Error Level Analysis compression artifacts</li>
+                  <li>Document perimeter localization &amp; layout containment</li>
+                </ul>
+              </div>
+
+              <div className="p-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
+                <strong className="text-amber-700 dark:text-amber-400 font-mono uppercase block">
+                  ✗ WHAT THE SYSTEM DID NOT VERIFY:
+                </strong>
+                <ul className="list-disc list-inside text-slate-600 dark:text-slate-300 space-y-0.5">
+                  <li>Deterministic mathematical checksums or format pattern validity (Step 2)</li>
+                  <li>Official issuer authority database registration or active status</li>
+                  <li>Biometric matching to genuine credential holder</li>
+                  <li>Physical security thread, microprinting, or holographic features</li>
+                  <li>Notice: Expired credentials indicate lapsed validity, NOT forgery or tampering</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SECTION G: LIMITATIONS */}
         <div className="p-4 bg-amber-500/10 dark:bg-amber-950/30 rounded-lg border border-amber-500/30 text-[11px] font-mono text-amber-950 dark:text-amber-200 space-y-2">
           <div className="flex items-center gap-2 font-bold text-xs uppercase tracking-wider text-amber-900 dark:text-amber-300">
             <ShieldAlert className="w-4 h-4 text-amber-500 flex-shrink-0" />
@@ -393,12 +455,15 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
               <strong>No Definite Fraud Classification:</strong> Quality flags represent inspection cues; they do not establish fraud.
             </li>
             <li>
+              <strong>Credential Expiry Is Separate from Fraud:</strong> An expired document indicates lapsed administrative validity; it does NOT constitute evidence of forgery or tampering.
+            </li>
+            <li>
               <strong>No External Registry Query:</strong> Candidate identifiers are parsed locally and not queried against government databases.
             </li>
           </ul>
         </div>
 
-        {/* SECTION G: PRIVACY CONTROLS & EXPORT */}
+        {/* SECTION H: PRIVACY CONTROLS & EXPORT */}
         <div className="pt-3 border-t border-slate-200/80 dark:border-slate-800 space-y-3 font-mono">
           <div className="p-3 bg-slate-50/80 dark:bg-slate-950/60 rounded-lg border border-slate-200/80 dark:border-slate-800 space-y-2">
             <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
@@ -433,6 +498,21 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
                 </span>
               </label>
             </div>
+
+            {/* Explicit PII Export Warning */}
+            {includeIdentifiableFields && (
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-md text-[11px] font-sans text-amber-900 dark:text-amber-200 flex items-start gap-2 animate-in fade-in">
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <strong className="font-bold block font-mono uppercase text-amber-950 dark:text-amber-100">
+                    EXPLICIT PII UNMASKING WARNING
+                  </strong>
+                  <span>
+                    You have enabled unmasking of personal identity fields. Downloaded dossier files will contain unmasked personal names, full identifier sequences, and dates of birth. Ensure strict compliance with personal data protection regulations prior to export or distribution.
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Save to Ledger / Export Row */}

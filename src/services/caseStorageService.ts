@@ -16,8 +16,8 @@ import type {
   CandidateField,
   ScreeningReportData
 } from '../types'
-import { maskCandidateFieldValue } from '../utils/reportExport'
-import { PROJECT_BRANDING } from '../constants/branding'
+import { maskCandidateFieldValue } from '../utils/reportExport.ts'
+import { PROJECT_BRANDING } from '../constants/branding.ts'
 
 const DB_NAME = 'falcon_cases_db'
 const DB_VERSION = 1

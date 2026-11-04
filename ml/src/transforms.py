@@ -19,7 +19,7 @@ Forensic Preprocessing Principles:
          destroy or obscure subtle tampering artifacts (splicing edges, ELA boundaries).
 """
 
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union
 from PIL import Image
 
 try:
@@ -44,6 +44,46 @@ class EnsureRGB:
 
     def __repr__(self) -> str:
         return "EnsureRGB()"
+
+
+class ResizeWithPad:
+    """
+    Resizes a PIL image preserving its native aspect ratio and pads the remainder
+    to reach target_size (width, height), preventing spatial glyph compression.
+
+    Args:
+        target_size: Desired (width, height) tuple (default: 224 x 224).
+        fill: Fill color for padded borders (default: 128 neutral gray).
+    """
+
+    def __init__(self, target_size: Union[int, Tuple[int, int]] = DEFAULT_INPUT_SIZE, fill: int = 128):
+        if isinstance(target_size, int):
+            self.target_size = (target_size, target_size)
+        else:
+            self.target_size = tuple(target_size)
+        self.fill = (fill, fill, fill) if isinstance(fill, int) else fill
+
+    def __call__(self, img: Image.Image) -> Image.Image:
+        target_w, target_h = self.target_size
+        orig_w, orig_h = img.size
+
+        # Compute scaling factor preserving aspect ratio
+        scale = min(target_w / orig_w, target_h / orig_h)
+        new_w = max(1, int(round(orig_w * scale)))
+        new_h = max(1, int(round(orig_h * scale)))
+
+        resized_img = img.resize((new_w, new_h), resample=Image.Resampling.BILINEAR)
+
+        # Create padded background
+        canvas = Image.new("RGB", (target_w, target_h), color=self.fill)
+        pad_x = (target_w - new_w) // 2
+        pad_y = (target_h - new_h) // 2
+        canvas.paste(resized_img, (pad_x, pad_y))
+
+        return canvas
+
+    def __repr__(self) -> str:
+        return f"ResizeWithPad(target_size={self.target_size}, fill={self.fill})"
 
 
 def get_eval_transforms(
@@ -132,6 +172,73 @@ def get_train_transforms(
     return transforms.Compose(transform_list)
 
 
+def get_aspect_ratio_preserving_eval_transforms(
+    input_size: Tuple[int, int] = DEFAULT_INPUT_SIZE,
+    pad_fill: int = 128
+) -> "transforms.Compose":
+    """
+    Returns deterministic evaluation transform preserving native document aspect ratio
+    with neutral gray padding.
+    """
+    if not TORCH_AVAILABLE:
+        raise RuntimeError("torch and torchvision are required for image transforms.")
+
+    return transforms.Compose([
+        EnsureRGB(),
+        ResizeWithPad(target_size=input_size, fill=pad_fill),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
+    ])
+
+
+def get_aspect_ratio_preserving_train_transforms(
+    input_size: Tuple[int, int] = DEFAULT_INPUT_SIZE,
+    pad_fill: int = 128,
+    brightness_jitter: float = 0.1,
+    contrast_jitter: float = 0.1,
+    rotation_degrees: float = 5.0,
+    enable_horizontal_flip: bool = False
+) -> "transforms.Compose":
+    """
+    Returns conservative training transforms with aspect ratio preservation and neutral padding.
+    """
+    if not TORCH_AVAILABLE:
+        raise RuntimeError("torch and torchvision are required for image transforms.")
+
+    transform_list = [
+        EnsureRGB(),
+        ResizeWithPad(target_size=input_size, fill=pad_fill),
+    ]
+
+    if rotation_degrees > 0.0:
+        transform_list.append(
+            transforms.RandomRotation(
+                degrees=(-rotation_degrees, rotation_degrees),
+                interpolation=transforms.InterpolationMode.BILINEAR
+            )
+        )
+
+    if brightness_jitter > 0.0 or contrast_jitter > 0.0:
+        transform_list.append(
+            transforms.ColorJitter(
+                brightness=brightness_jitter,
+                contrast=contrast_jitter,
+                saturation=0.0,
+                hue=0.0
+            )
+        )
+
+    if enable_horizontal_flip:
+        transform_list.append(transforms.RandomHorizontalFlip(p=0.5))
+
+    transform_list.extend([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
+    ])
+
+    return transforms.Compose(transform_list)
+
+
 def denormalize_tensor(tensor: "torch.Tensor") -> "torch.Tensor":
     """
     Inverts ImageNet normalization on a [C, H, W] or [B, C, H, W] tensor for visual inspection.
@@ -150,3 +257,9 @@ def denormalize_tensor(tensor: "torch.Tensor") -> "torch.Tensor":
         std = std.view(-1, 1, 1)
 
     return (tensor * std) + mean
+
+
+# Convenience aliases for padded transforms
+get_eval_transforms_padded = get_aspect_ratio_preserving_eval_transforms
+get_train_transforms_padded = get_aspect_ratio_preserving_train_transforms
+

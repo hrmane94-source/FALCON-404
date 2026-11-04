@@ -120,6 +120,8 @@ class FalconMobileNetV3(nn.Module):
             "frozen_parameters": frozen
         }
 
+    get_parameter_summary = count_parameters
+
 
 def create_mobilenet_v3_small(
     num_classes: int = 2,

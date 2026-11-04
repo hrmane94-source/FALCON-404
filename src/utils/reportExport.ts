@@ -269,6 +269,30 @@ export function generateScreeningReportJson(report: ScreeningReportData): string
       recommendedAction: report.integrityResult.assessment.recommendedAction,
       disclaimer: report.integrityResult.assessment.disclaimer
     },
+    ...(report.mlResult
+      ? {
+          aiDocumentManipulationScreening: {
+            classification: report.mlResult.predictedClass,
+            genuineProbability: `${(report.mlResult.genuineProbability * 100).toFixed(2)}%`,
+            manipulatedProbability: `${(report.mlResult.manipulatedProbability * 100).toFixed(2)}%`,
+            confidenceScore: `${(report.mlResult.confidence * 100).toFixed(2)}%`,
+            tamperingScore: report.mlResult.tamperingScore,
+            decisionThreshold: report.mlResult.decisionThreshold,
+            reviewBand: report.mlResult.reviewBand,
+            inferenceTimeMs: report.mlResult.processingTimeMs,
+            computeDevice: report.mlResult.device,
+            modelArchitecture: 'MobileNetV3-Small',
+            modelIdentifier: report.mlResult.modelIdentifier,
+            disclaimer: report.mlResult.screeningDisclaimer,
+            limitations: [
+              'Model evaluated on synthetic document dataset (FALCON-404 Dataset v1.1).',
+              'High recall on photo replacement (100%) and shadow discrepancies (100%).',
+              'Low recall on micro text modifications and localized copy-move operations.',
+              'Experimental assessment: does not establish official issuer authenticity.'
+            ]
+          }
+        }
+      : {}),
     institutionalDisclaimers: [
       'This report is generated from client-side automated heuristics executed in the examiner browser runtime.',
       'OCR extracts text glyphs and does not authenticate citizenship, identity records, or document issuance.',
@@ -434,6 +458,25 @@ export function generateScreeningReportText(report: ScreeningReportData): string
       lines.push(`    Limitations : ${f.limitations}`)
     }
     lines.push('')
+  }
+
+  if (report.mlResult) {
+    lines.push(
+      '--------------------------------------------------------------------------------',
+      ' AI NEURAL DOCUMENT MANIPULATION SCREENING (MobileNetV3-Small)',
+      '--------------------------------------------------------------------------------',
+      `Classification   : ${report.mlResult.predictedClass}`,
+      `Tampering Score  : ${(report.mlResult.tamperingScore * 100).toFixed(2)}% (Threshold: ${report.mlResult.decisionThreshold})`,
+      `Genuine Prob     : ${(report.mlResult.genuineProbability * 100).toFixed(2)}%`,
+      `Manipulated Prob : ${(report.mlResult.manipulatedProbability * 100).toFixed(2)}%`,
+      `Model Confidence : ${(report.mlResult.confidence * 100).toFixed(2)}%`,
+      `Latency / Device : ${report.mlResult.processingTimeMs.toFixed(2)} ms (${report.mlResult.device})`,
+      `Model Identifier : ${report.mlResult.modelIdentifier}`,
+      `Disclaimer       : ${report.mlResult.screeningDisclaimer}`,
+      'Model Scope Note : High recall on photo and shadow anomalies (100% test recall).',
+      '                   Low recall on micro-text alterations and copy-move (0% test recall).',
+      ''
+    )
   }
 
   lines.push(

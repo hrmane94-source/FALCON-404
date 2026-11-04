@@ -65,9 +65,31 @@ class FalconMobileNetV3(nn.Module):
             self.backbone.classifier[2] = nn.Dropout(p=dropout_rate, inplace=True)
         self.backbone.classifier[3] = nn.Linear(in_features, num_classes)
 
+        self.freeze_features = freeze_features
+        self.unfreeze_upper_layers = unfreeze_upper_layers
+
         # Configure layer freezing / fine-tuning
         if freeze_features:
             self.freeze_backbone(unfreeze_upper_layers=unfreeze_upper_layers)
+
+    def train(self, mode: bool = True):
+        """
+        Overrides nn.Module.train to enforce strict BatchNorm evaluation mode
+        on frozen backbone feature layers, preventing running statistics drift.
+        """
+        super().train(mode)
+        if mode and self.freeze_features:
+            num_blocks = len(self.backbone.features)
+            frozen_limit = (
+                num_blocks - self.unfreeze_upper_layers
+                if self.unfreeze_upper_layers is not None and self.unfreeze_upper_layers > 0
+                else num_blocks
+            )
+            for i in range(frozen_limit):
+                for m in self.backbone.features[i].modules():
+                    if isinstance(m, (nn.BatchNorm2d, nn.SyncBatchNorm)):
+                        m.eval()
+        return self
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -84,21 +106,32 @@ class FalconMobileNetV3(nn.Module):
     def freeze_backbone(self, unfreeze_upper_layers: Optional[int] = None) -> None:
         """
         Freezes feature extractor layers, optionally leaving the last N layers trainable.
+        Also forces BatchNorm layers in frozen blocks into evaluation mode.
 
         Args:
             unfreeze_upper_layers: Number of final feature blocks (from features) to keep trainable.
         """
+        self.freeze_features = True
+        self.unfreeze_upper_layers = unfreeze_upper_layers
+
         # Freeze all parameters in features
         for param in self.backbone.features.parameters():
             param.requires_grad = False
 
         # Optionally unfreeze top N blocks in features
+        num_blocks = len(self.backbone.features)
+        start_idx = num_blocks
         if unfreeze_upper_layers is not None and unfreeze_upper_layers > 0:
-            num_blocks = len(self.backbone.features)
             start_idx = max(0, num_blocks - unfreeze_upper_layers)
             for i in range(start_idx, num_blocks):
                 for param in self.backbone.features[i].parameters():
                     param.requires_grad = True
+
+        # Keep frozen feature BatchNorm modules in eval mode
+        for i in range(start_idx):
+            for m in self.backbone.features[i].modules():
+                if isinstance(m, (nn.BatchNorm2d, nn.SyncBatchNorm)):
+                    m.eval()
 
         # Classifier head remains trainable
         for param in self.backbone.classifier.parameters():
@@ -106,8 +139,13 @@ class FalconMobileNetV3(nn.Module):
 
     def unfreeze_all(self) -> None:
         """Unfreezes all parameters across features and classifier for full end-to-end training."""
+        self.freeze_features = False
+        self.unfreeze_upper_layers = None
         for param in self.parameters():
             param.requires_grad = True
+        for m in self.modules():
+            if isinstance(m, (nn.BatchNorm2d, nn.SyncBatchNorm)):
+                m.train()
 
     def count_parameters(self) -> Dict[str, int]:
         """Returns counts of total, trainable, and frozen parameters."""

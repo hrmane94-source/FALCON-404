@@ -9,7 +9,8 @@ import {
   Lock,
   Archive,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  Cpu
 } from 'lucide-react'
 import type {
   ScreeningReportData,
@@ -17,7 +18,8 @@ import type {
   DocumentLayoutResult,
   OCRResult,
   OCRStatus,
-  WorkflowScreeningDossier
+  WorkflowScreeningDossier,
+  AIMLScreeningResult
 } from '../../types'
 import { Card } from '../common/Card'
 import { Badge } from '../common/Badge'
@@ -38,6 +40,7 @@ export interface ScreeningReportSectionProps {
   integrityResult: ImageIntegrityResult | null
   layoutResult?: DocumentLayoutResult | null
   workflowDossier?: WorkflowScreeningDossier | null
+  mlResult?: AIMLScreeningResult | null
   disabled?: boolean
   reportId?: string
   autoSaveStatus?: 'idle' | 'saving' | 'saved' | 'error'
@@ -53,6 +56,7 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
   integrityResult,
   layoutResult,
   workflowDossier,
+  mlResult,
   disabled = false,
   reportId: passedReportId,
   autoSaveStatus = 'idle',
@@ -91,6 +95,7 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
     ocrResult: ocrResult || undefined,
     integrityResult,
     layoutResult: layoutResult || undefined,
+    mlResult: mlResult || undefined,
     privacySettings: {
       includeFullOCR,
       includeIdentifiableFields
@@ -337,6 +342,130 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
             </div>
           </div>
         )}
+
+        
+        {/* SECTION: AI NEURAL DOCUMENT SCREENING (MobileNetV3-Small) */}
+        {mlResult && (
+          <div className="p-4 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-3 font-mono text-xs">
+            <div className="flex flex-wrap items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5 gap-2">
+              <div className="flex items-center gap-2 font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                <Cpu className="w-4 h-4 text-cyan-500 animate-pulse" />
+                <span>AI NEURAL DOCUMENT SCREENING // MobileNetV3-Small</span>
+              </div>
+              <Badge
+                variant={
+                  mlResult.predictedClass === 'GENUINE'
+                    ? 'success'
+                    : mlResult.predictedClass === 'MANIPULATED'
+                    ? 'danger'
+                    : mlResult.predictedClass === 'NEEDS_REVIEW'
+                    ? 'warning'
+                    : 'neutral'
+                }
+                size="sm"
+              >
+                {mlResult.predictedClass === 'GENUINE' && '● GENUINE (NO TAMPERING DETECTED)'}
+                {mlResult.predictedClass === 'MANIPULATED' && '▲ MANIPULATED (FORGERY DETECTED)'}
+                {mlResult.predictedClass === 'NEEDS_REVIEW' && '◆ NEEDS REVIEW (AMBIGUOUS CONFIDENCE)'}
+                {mlResult.predictedClass === 'ERROR' && '✕ SCREENING ERROR / UNAVAILABLE'}
+              </Badge>
+            </div>
+
+            {/* Metrics Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+              <div className="p-2.5 rounded bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800">
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase block">CLASSIFICATION</span>
+                <strong
+                  className={
+                    mlResult.predictedClass === 'GENUINE'
+                      ? 'text-emerald-600 dark:text-emerald-400 font-bold text-sm'
+                      : mlResult.predictedClass === 'MANIPULATED'
+                      ? 'text-rose-600 dark:text-rose-400 font-bold text-sm'
+                      : mlResult.predictedClass === 'NEEDS_REVIEW'
+                      ? 'text-amber-600 dark:text-amber-400 font-bold text-sm'
+                      : 'text-slate-500 text-sm'
+                  }
+                >
+                  {mlResult.predictedClass}
+                </strong>
+              </div>
+
+              <div className="p-2.5 rounded bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800">
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase block">P(GENUINE)</span>
+                <strong className="text-slate-800 dark:text-slate-200 font-bold text-sm">
+                  {(mlResult.genuineProbability * 100).toFixed(1)}%
+                </strong>
+              </div>
+
+              <div className="p-2.5 rounded bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800">
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase block">P(MANIPULATED)</span>
+                <strong
+                  className={
+                    mlResult.manipulatedProbability > 0.5
+                      ? 'text-rose-600 dark:text-rose-400 font-bold text-sm'
+                      : 'text-slate-800 dark:text-slate-200 font-bold text-sm'
+                  }
+                >
+                  {(mlResult.manipulatedProbability * 100).toFixed(1)}%
+                </strong>
+              </div>
+
+              <div className="p-2.5 rounded bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800">
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase block">PROCESSING TIME</span>
+                <strong
+                  className="text-slate-800 dark:text-slate-200 font-bold text-sm truncate block"
+                  title={`${mlResult.processingTimeMs.toFixed(1)}ms on ${mlResult.device}`}
+                >
+                  {mlResult.processingTimeMs.toFixed(1)}ms{' '}
+                  <span className="text-[10px] text-slate-400 font-normal">({mlResult.device})</span>
+                </strong>
+              </div>
+            </div>
+
+            {/* Probability Progress Bar */}
+            <div className="space-y-1.5 pt-1">
+              <div className="flex justify-between text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                <span className="text-emerald-700 dark:text-emerald-400">
+                  GENUINE: {(mlResult.genuineProbability * 100).toFixed(1)}%
+                </span>
+                <span className="text-[9px] uppercase tracking-wider text-slate-400">
+                  CONFIDENCE: {(mlResult.confidence * 100).toFixed(1)}% (THRESHOLD: 50%)
+                </span>
+                <span className="text-rose-700 dark:text-rose-400">
+                  MANIPULATED: {(mlResult.manipulatedProbability * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden flex border border-slate-200 dark:border-slate-800 relative">
+                <div
+                  className="bg-emerald-500 transition-all duration-500"
+                  style={{ width: `${Math.round(mlResult.genuineProbability * 100)}%` }}
+                />
+                <div
+                  className="bg-rose-500 transition-all duration-500"
+                  style={{ width: `${Math.round(mlResult.manipulatedProbability * 100)}%` }}
+                />
+                <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-white dark:bg-slate-950 shadow-sm" />
+              </div>
+            </div>
+
+            {/* Mandatory Governance Disclaimer */}
+            <div className="p-2.5 rounded bg-cyan-500/5 dark:bg-cyan-500/10 border border-cyan-500/20 text-[11px] font-sans text-cyan-900 dark:text-cyan-200 space-y-1">
+              <div className="flex items-start gap-1.5 font-semibold">
+                <AlertTriangle className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400 shrink-0 mt-0.5" />
+                <span>AI screening is an experimental assessment of visual document manipulation. It does not establish official document authenticity.</span>
+              </div>
+              <div className="text-[10px] text-slate-600 dark:text-slate-400 pl-5 space-y-0.5">
+                <p>
+                  <strong>Model Limitations:</strong> High sensitivity to photo swaps (100% test recall) and shadow anomalies (100% test recall). Low sensitivity to micro text alterations and localized copy-move cloning (0% test recall).
+                </p>
+                <p>
+                  <strong>Independent Evidence:</strong> AI screening operates as a preliminary corroborating signal and does not override statutory issuer verification, deterministic checksums, or OCR analysis.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
 
         {/* SECTION E: PRELIMINARY ASSESSMENT & FINDINGS */}
         <div className="p-4 rounded-lg bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 space-y-3 font-mono">

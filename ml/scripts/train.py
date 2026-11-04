@@ -25,7 +25,12 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from ml.configs.baseline_config import BaselineConfig
+from ml.configs import (
+    BaselineConfig,
+    get_final_model_experiment_config,
+    get_pretrained_experiment_config,
+    get_default_baseline_config
+)
 from ml.src.device import get_device, get_device_info, is_cuda_available
 from ml.src.dataset import FalconDocumentDataset, validate_falcon_dataset
 from ml.src.model import create_mobilenet_v3_small
@@ -48,8 +53,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dataset-dir",
         type=str,
-        default="ml_data/FALCON_404_DATASET_v1.0",
-        help="Path to FALCON-404 dataset directory",
+        default=None,
+        help="Path to FALCON-404 dataset directory (defaults to preset dataset)",
     )
     parser.add_argument(
         "--experiment-name",
@@ -85,6 +90,36 @@ def parse_args() -> argparse.Namespace:
         "--aspect-ratio-preserve",
         action="store_true",
         help="Enable aspect-ratio preserving ResizeWithPad transforms",
+    )
+    parser.add_argument(
+        "--pretrained",
+        action="store_true",
+        help="Load ImageNet pretrained weights for transfer learning",
+    )
+    parser.add_argument(
+        "--weights",
+        type=str,
+        default=None,
+        help="Explicit torchvision weights enum string (e.g. 'DEFAULT')",
+    )
+    parser.add_argument(
+        "--unfreeze-upper-layers",
+        type=int,
+        default=None,
+        help="Number of upper feature blocks to keep trainable",
+    )
+    parser.add_argument(
+        "--backbone-lr",
+        type=float,
+        default=None,
+        help="Differential learning rate for unfrozen backbone feature blocks",
+    )
+    parser.add_argument(
+        "--preset",
+        type=str,
+        default=None,
+        choices=["final", "pretrained", "baseline"],
+        help="Use standardized configuration preset ('final', 'pretrained', 'baseline')",
     )
     parser.add_argument(
         "--dry-run",
@@ -145,7 +180,9 @@ def perform_dry_run(config: BaselineConfig, dataset_dir: str) -> None:
 
     # 5. Pipeline Summary
     logger.info("-" * 70)
-    logger.info(f"Learning Rate:        {config.learning_rate}")
+    logger.info(f"Learning Rate (Head): {config.learning_rate}")
+    if config.backbone_lr:
+        logger.info(f"Learning Rate (Backbone): {config.backbone_lr}")
     logger.info(f"Weight Decay:         {config.weight_decay}")
     logger.info(f"Early Stopping:       patience={config.early_stopping_patience}, mode={config.early_stopping_mode}")
     logger.info(f"Mixed Precision:      {config.mixed_precision}")
@@ -161,11 +198,20 @@ def main() -> None:
     args = parse_args()
     logger = logging.getLogger("falcon404.cli")
 
-    # Instantiate config
-    config = BaselineConfig(
-        dataset_dir=args.dataset_dir,
-        experiment_name=args.experiment_name,
-    )
+    kwargs = {"experiment_name": args.experiment_name}
+    if args.dataset_dir is not None:
+        kwargs["dataset_dir"] = args.dataset_dir
+
+    # Instantiate config from preset or defaults
+    if args.preset == "final" or args.experiment_name == "exp_20261104_falcon404_final_model":
+        config = get_final_model_experiment_config(**kwargs)
+    elif args.preset == "pretrained":
+        config = get_pretrained_experiment_config(**kwargs)
+    else:
+        config = BaselineConfig(
+            dataset_dir=args.dataset_dir or "ml_data/FALCON_404_DATASET_v1.0",
+            experiment_name=args.experiment_name,
+        )
 
     # Apply CLI overrides
     if args.epochs is not None:
@@ -174,15 +220,25 @@ def main() -> None:
         config.batch_size = args.batch_size
     if args.lr is not None:
         config.learning_rate = args.lr
+    if args.backbone_lr is not None:
+        config.backbone_lr = args.backbone_lr
     if args.device is not None:
         config.device = args.device
     if args.aspect_ratio_preserve:
         config.aspect_ratio_preserve = True
+    if args.pretrained:
+        config.pretrained = True
+        config.weights = "DEFAULT"
+    if args.weights is not None:
+        config.weights = args.weights
+        config.pretrained = True
+    if args.unfreeze_upper_layers is not None:
+        config.unfreeze_upper_layers = args.unfreeze_upper_layers
 
     config.validate()
 
     if args.dry_run:
-        perform_dry_run(config, args.dataset_dir)
+        perform_dry_run(config, config.dataset_dir)
         sys.exit(0)
 
     logger.info("Starting FALCON-404 Model Training...")

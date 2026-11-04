@@ -28,6 +28,7 @@ export type {
 
 const SUPPORTED_TYPES = new Set(['Aadhaar', 'PAN', 'Driving Licence', 'Passport', 'Other / Unknown'])
 const SERVER_START_TIME = Date.now()
+const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://127.0.0.1:8000'
 
 export const sendJson = (res: ServerResponse, statusCode: number, data: unknown) => {
   const payload = JSON.stringify(data, null, 2)
@@ -65,6 +66,7 @@ export const handleApiHealth = (_req: IncomingMessage, res: ServerResponse) => {
 }
 
 export const handleApiCapabilities = (_req: IncomingMessage, res: ServerResponse) => {
+  const isMlEnabled = process.env.ML_SERVICE_ENABLED === 'true'
   const capabilitiesData: ApiCapabilitiesResponse = {
     system: 'FALCON-404 Document Screening Platform',
     version: '1.0.0',
@@ -75,7 +77,7 @@ export const handleApiCapabilities = (_req: IncomingMessage, res: ServerResponse
       boundaryAndLayoutAnalysis: 'IMPLEMENTED',
       deterministicIdentifierValidation: 'NOT_IMPLEMENTED',
       documentSpecificProfiles: 'NOT_IMPLEMENTED',
-      trainedMlTamperingDetection: 'NOT_IMPLEMENTED',
+      trainedMlTamperingDetection: isMlEnabled ? 'IMPLEMENTED' : 'NOT_IMPLEMENTED',
       issuerVerification: 'UNAVAILABLE'
     },
     plannedMilestones: {
@@ -90,6 +92,62 @@ export const handleApiCapabilities = (_req: IncomingMessage, res: ServerResponse
     ]
   }
   sendJson(res, 200, capabilitiesData)
+}
+
+export const handleApiMlHealth = async (_req: IncomingMessage, res: ServerResponse) => {
+  try {
+    const mlRes = await fetch(`${ML_SERVICE_URL}/health`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' }
+    })
+    if (!mlRes.ok) {
+      sendError(res, mlRes.status, 'ML_SERVICE_ERROR', `ML inference service returned status ${mlRes.status}.`)
+      return
+    }
+    const data = await mlRes.json()
+    sendJson(res, 200, data)
+  } catch (err: any) {
+    sendError(res, 503, 'ML_SERVICE_UNAVAILABLE', 'Python ML inference service is offline or unreachable.')
+  }
+}
+
+export const handleApiMlPredict = async (req: IncomingMessage, res: ServerResponse) => {
+  const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 // 10MB
+  const chunks: Buffer[] = []
+  let totalBytes = 0
+
+  try {
+    for await (const chunk of req) {
+      totalBytes += chunk.length
+      if (totalBytes > MAX_UPLOAD_BYTES) {
+        sendError(res, 413, 'PAYLOAD_TOO_LARGE', 'Uploaded document exceeds 10MB limit.')
+        return
+      }
+      chunks.push(chunk)
+    }
+
+    if (totalBytes === 0) {
+      sendError(res, 400, 'EMPTY_REQUEST_BODY', 'Request payload cannot be empty.')
+      return
+    }
+
+    const bodyBuffer = Buffer.concat(chunks)
+    const contentType = req.headers['content-type'] || 'application/octet-stream'
+
+    const mlRes = await fetch(`${ML_SERVICE_URL}/predict`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': contentType,
+        'Content-Length': String(totalBytes)
+      },
+      body: bodyBuffer
+    })
+
+    const mlData = await mlRes.json()
+    sendJson(res, mlRes.status, mlData)
+  } catch (err: any) {
+    sendError(res, 503, 'ML_SERVICE_UNAVAILABLE', 'Python ML inference service is offline or unreachable.')
+  }
 }
 
 export const handleApiScreenings = async (req: IncomingMessage, res: ServerResponse) => {

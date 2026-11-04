@@ -12,6 +12,8 @@ import {
   handleApiHealth,
   handleApiCapabilities,
   handleApiScreenings,
+  handleApiMlHealth,
+  handleApiMlPredict,
   sendError
 } from './api.ts'
 
@@ -43,6 +45,14 @@ export const router = async (req: IncomingMessage, res: ServerResponse) => {
 
   if (url.pathname === '/api/v1/screenings' && method === 'POST') {
     return handleApiScreenings(req, res)
+  }
+
+  if (url.pathname === '/api/v1/ml/health' && method === 'GET') {
+    return handleApiMlHealth(req, res)
+  }
+
+  if (url.pathname === '/api/v1/ml/predict' && method === 'POST') {
+    return handleApiMlPredict(req, res)
   }
 
   // Route not found

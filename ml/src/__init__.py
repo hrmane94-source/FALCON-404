@@ -76,6 +76,16 @@ from .engine import (
     build_dataloaders,
 )
 
+from .visualization import (
+    plot_training_curves,
+    plot_confusion_matrix_heatmap,
+)
+
+from .inference import (
+    FalconDocumentClassifier,
+    get_classifier,
+)
+
 __all__ = [
     # Dataset & Validation
     "FalconDocumentDataset",
@@ -129,4 +139,10 @@ __all__ = [
     "validate_one_epoch",
     "run_training",
     "build_dataloaders",
+    # Visualization
+    "plot_training_curves",
+    "plot_confusion_matrix_heatmap",
+    # Inference
+    "FalconDocumentClassifier",
+    "get_classifier",
 ]

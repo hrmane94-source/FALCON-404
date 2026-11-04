@@ -120,6 +120,68 @@ class TestMobileNetV3Model(unittest.TestCase):
         self.assertEqual(output.device.type, "cuda")
         self.assertEqual(output.shape, (2, 2))
 
+    def test_pretrained_model_initialization(self):
+        """9. Verifies pretrained ImageNet model initialization with frozen backbone."""
+        model = create_mobilenet_v3_small(num_classes=2, pretrained=True, freeze_features=True)
+        self.assertEqual(model.num_classes, 2)
+
+        # Feature extractor layers must be frozen
+        for name, param in model.backbone.features.named_parameters():
+            self.assertFalse(param.requires_grad, f"Pretrained feature {name} should be frozen.")
+
+        # Classifier head must be trainable
+        for name, param in model.backbone.classifier.named_parameters():
+            self.assertTrue(param.requires_grad, f"Classifier parameter {name} should be trainable.")
+
+        counts = model.count_parameters()
+        self.assertEqual(counts["total_parameters"], 1519906)
+        self.assertEqual(counts["trainable_parameters"], 592898)
+        self.assertEqual(counts["frozen_parameters"], 927008)
+
+    def test_pretrained_forward_pass_no_nan_or_inf(self):
+        """10. Verifies pretrained model produces [B, 2] logits without NaN or Inf values."""
+        model = create_mobilenet_v3_small(num_classes=2, pretrained=True, freeze_features=True)
+        model.eval()
+
+        batch_sizes = [1, 2, 4]
+        for b in batch_sizes:
+            dummy_input = torch.randn(b, 3, 224, 224)
+            with torch.no_grad():
+                output = model(dummy_input)
+            self.assertEqual(output.shape, (b, 2))
+            self.assertFalse(torch.isnan(output).any(), "Pretrained logits contained NaN.")
+            self.assertFalse(torch.isinf(output).any(), "Pretrained logits contained Inf.")
+
+    def test_frozen_backbone_batchnorm_remains_in_eval_mode(self):
+        """11. Verifies BatchNorm running stats remain frozen when backbone is frozen in train mode."""
+        model = create_mobilenet_v3_small(num_classes=2, pretrained=True, freeze_features=True)
+        model.train()
+
+        # Feature BatchNorm modules must be in eval mode
+        for name, module in model.backbone.features.named_modules():
+            if isinstance(module, torch.nn.BatchNorm2d):
+                self.assertFalse(module.training, f"BatchNorm {name} should be in eval mode.")
+
+        # Classifier modules must be in train mode
+        self.assertTrue(model.backbone.classifier.training)
+
+        # Forward pass in train mode should NOT alter running_mean or running_var
+        first_bn = None
+        for m in model.backbone.features.modules():
+            if isinstance(m, torch.nn.BatchNorm2d):
+                first_bn = m
+                break
+
+        self.assertIsNotNone(first_bn)
+        orig_mean = first_bn.running_mean.clone()
+        orig_var = first_bn.running_var.clone()
+
+        dummy_batch = torch.randn(4, 3, 224, 224)
+        _ = model(dummy_batch)
+
+        self.assertTrue(torch.equal(orig_mean, first_bn.running_mean))
+        self.assertTrue(torch.equal(orig_var, first_bn.running_var))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -29,7 +29,8 @@ import type {
   ScreeningReportData,
   SupportedDocumentType,
   ExtractedDocumentField,
-  WorkflowScreeningDossier
+  WorkflowScreeningDossier,
+  AIMLScreeningResult
 } from '../types'
 import { Card } from '../components/common/Card'
 import { Badge } from '../components/common/Badge'
@@ -44,6 +45,7 @@ import { VerificationSummaryPanel } from '../components/validation/VerificationS
 import { performOCR } from '../services/ocrService'
 import { performImageIntegrityAnalysis } from '../services/imageIntegrityService'
 import { performDocumentLayoutAnalysis } from '../services/documentLayoutService'
+import { screenDocumentWithML } from '../services/apiService'
 import { orchestrateScreeningVerification } from '../services/verificationEngine'
 import { mapSupportedToLegacyDocumentType } from '../constants/documentTypes'
 import { PROJECT_BRANDING } from '../constants/branding'
@@ -91,6 +93,12 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
   const [layoutResult, setLayoutResult] = useState<DocumentLayoutResult | null>(null)
   const [layoutError, setLayoutError] = useState<string | null>(null)
 
+  // Stage 05: AI Neural Screening State (Phase 7.3)
+  const [mlStatus, setMlStatus] = useState<'idle' | 'analyzing' | 'success' | 'error'>('idle')
+  const [mlResult, setMlResult] = useState<AIMLScreeningResult | null>(null)
+  const [mlError, setMlError] = useState<string | null>(null)
+
+
   const handleSelectDocType = (type: SupportedDocumentType, mode: 'manual' | 'ocr-inferred' = 'manual') => {
     setSelectedSupportedDocType(type)
     setSelectedDocType(mapSupportedToLegacyDocumentType(type))
@@ -126,6 +134,9 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
     setLayoutProgress(null)
     setLayoutResult(null)
     setLayoutError(null)
+    setMlStatus('idle')
+    setMlResult(null)
+    setMlError(null)
     setAutoSaveStatus('idle')
     setAutoSaveError(null)
     setCustomizedFields({})
@@ -226,6 +237,9 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
 
     setLayoutStatus('analyzing')
     setLayoutError(null)
+    setMlStatus('idle')
+    setMlResult(null)
+    setMlError(null)
     setLayoutProgress({
       status: 'CONVOLVING SOBEL MATRIX & ESTIMATING QUADRILATERAL...',
       progress: 0.15,
@@ -255,10 +269,34 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
     }
   }
 
+  const handleRunML = async (): Promise<AIMLScreeningResult | null> => {
+    if (!uploadedDoc?.file) return null
+
+    setMlStatus('analyzing')
+    setMlError(null)
+
+    try {
+      const result = await screenDocumentWithML(uploadedDoc.file)
+      setMlResult(result)
+      if (result?.predictedClass === 'ERROR') {
+        setMlStatus('error')
+        setMlError(result.error || 'AI screening service returned an error.')
+      } else {
+        setMlStatus('success')
+      }
+      return result
+    } catch (err: any) {
+      setMlStatus('error')
+      setMlError(err?.message || 'Failed to complete AI document screening.')
+      return null
+    }
+  }
+
   const executeAutoSave = async (
     activeOcr: OCRResult | null,
     activeIntegrity: ImageIntegrityResult,
-    activeLayout: DocumentLayoutResult | null
+    activeLayout: DocumentLayoutResult | null,
+    activeMl?: AIMLScreeningResult | null
   ) => {
     // Idempotency: prevent saving twice for the exact same session reference
     if (savedSessionRef.current === caseReference) {
@@ -281,6 +319,7 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
         ocrResult: activeOcr || undefined,
         integrityResult: activeIntegrity,
         layoutResult: activeLayout || undefined,
+        mlResult: activeMl || mlResult || undefined,
         privacySettings: {
           includeFullOCR: false,
           includeIdentifiableFields: false
@@ -307,7 +346,7 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
 
   const handleRetryAutoSave = async () => {
     if (!integrityResult) return
-    await executeAutoSave(ocrResult, integrityResult, layoutResult)
+    await executeAutoSave(ocrResult, integrityResult, layoutResult, mlResult)
   }
 
   const handleRunCompleteScreening = async () => {
@@ -318,16 +357,18 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
     }
     const currentIntegrity = await handleRunIntegrity()
     const currentLayout = await handleRunLayout(currentOcr)
+    const currentMl = await handleRunML()
 
     if (currentIntegrity) {
-      await executeAutoSave(currentOcr, currentIntegrity, currentLayout)
+      await executeAutoSave(currentOcr, currentIntegrity, currentLayout, currentMl)
     }
   }
 
   const isOcrRunning = ocrStatus === 'initializing' || ocrStatus === 'recognizing'
   const isIntegrityRunning = integrityStatus === 'analyzing'
   const isLayoutRunning = layoutStatus === 'analyzing'
-  const isProcessing = isOcrRunning || isIntegrityRunning || isLayoutRunning
+  const isMlRunning = mlStatus === 'analyzing'
+  const isProcessing = isOcrRunning || isIntegrityRunning || isLayoutRunning || isMlRunning
 
   const documentOptions: {
     type: SupportedDocumentType
@@ -908,6 +949,23 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
             </div>
           )}
 
+          {mlStatus === 'error' && mlError && (
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs font-mono text-amber-700 dark:text-amber-300 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                <span>[AI INFERENCE NOTICE]: {mlError} (Continuing with client-side heuristics)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleRunML()}
+                disabled={isProcessing}
+                className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-[10px] font-bold uppercase cursor-pointer"
+              >
+                RETRY AI SCREEN
+              </button>
+            </div>
+          )}
+
           {/* PRELIMINARY SCREENING REPORT DOSSIER */}
           {integrityResult && (
             <ScreeningReportSection
@@ -918,6 +976,7 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
               integrityResult={integrityResult}
               layoutResult={layoutResult}
               workflowDossier={workflowDossier}
+              mlResult={mlResult}
               disabled={isProcessing}
               reportId={caseReference}
               autoSaveStatus={autoSaveStatus}

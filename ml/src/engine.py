@@ -17,8 +17,12 @@ Engineering Standards:
       The test split is NEVER consumed during training.
 """
 
+import os
+import shutil
+import json
 import time
 import logging
+from collections import defaultdict
 from typing import Dict, Any, Tuple, Optional, List
 import torch
 import torch.nn as nn
@@ -38,6 +42,7 @@ from .checkpoint import CheckpointManager
 from .early_stopping import EarlyStopping
 from .logger import ExperimentLogger
 from .reproducibility import seed_everything, seed_worker
+from .visualization import plot_training_curves, plot_confusion_matrix_heatmap
 from ..configs.baseline_config import BaselineConfig
 
 logger = logging.getLogger("falcon404.engine")
@@ -272,14 +277,35 @@ def run_training(
         unfreeze_upper_layers=config.unfreeze_upper_layers
     ).to(device)
 
-    # 6. Loss & Optimizer
+    # 6. Loss & Optimizer (Supports two-speed learning rate for fine-tuning)
     criterion = nn.CrossEntropyLoss()
-    trainable_params = [p for p in model.parameters() if p.requires_grad]
-    optimizer = torch.optim.AdamW(
-        trainable_params,
-        lr=config.learning_rate,
-        weight_decay=config.weight_decay
-    )
+    if (
+        hasattr(config, "backbone_lr")
+        and config.backbone_lr is not None
+        and config.unfreeze_upper_layers is not None
+        and config.unfreeze_upper_layers > 0
+    ):
+        backbone_trainable = [p for p in model.backbone.features.parameters() if p.requires_grad]
+        head_trainable = [p for p in model.backbone.classifier.parameters() if p.requires_grad]
+        param_groups = [
+            {"params": backbone_trainable, "lr": config.backbone_lr, "name": "backbone_features"},
+            {"params": head_trainable, "lr": config.learning_rate, "name": "classifier_head"}
+        ]
+        optimizer = torch.optim.AdamW(
+            param_groups,
+            weight_decay=config.weight_decay
+        )
+        logger.info(
+            f"Configured two-speed AdamW: {len(backbone_trainable)} backbone tensors (lr={config.backbone_lr}), "
+            f"{len(head_trainable)} head tensors (lr={config.learning_rate})"
+        )
+    else:
+        trainable_params = [p for p in model.parameters() if p.requires_grad]
+        optimizer = torch.optim.AdamW(
+            trainable_params,
+            lr=config.learning_rate,
+            weight_decay=config.weight_decay
+        )
 
     # 7. Learning Rate Scheduler
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -319,6 +345,10 @@ def run_training(
     print(f"Backbone:   MobileNetV3-Small (freeze_features={config.freeze_features})")
     print(f"AMP:        {bool(scaler is not None)}")
     print("=" * 70)
+
+    # Reset peak memory statistics before training starts
+    if device.type == "cuda":
+        torch.cuda.reset_peak_memory_stats(device)
 
     # 10. Training Loop
     for epoch in range(1, config.num_epochs + 1):
@@ -393,15 +423,147 @@ def run_training(
             print(f"\n[EARLY STOPPING TRIGGERED] Validation metric failed to improve for {config.early_stopping_patience} epochs.")
             break
 
+    exp_dir = os.path.join(config.experiment_dir, config.experiment_name)
+    os.makedirs(exp_dir, exist_ok=True)
+
+    peak_allocated_mb = 0.0
+    peak_reserved_mb = 0.0
+    total_device_vram_gb = dev_info.get("total_memory_gb", 0.0)
+
+    if device.type == "cuda":
+        peak_allocated_mb = round(torch.cuda.max_memory_allocated(device) / (1024 ** 2), 2)
+        peak_reserved_mb = round(torch.cuda.max_memory_reserved(device) / (1024 ** 2), 2)
+
+    cuda_telemetry = {
+        "device_target": str(device),
+        "device_name": dev_info.get("device_name", "Unknown"),
+        "pytorch_peak_allocated_mb": peak_allocated_mb,
+        "pytorch_peak_reserved_mb": peak_reserved_mb,
+        "total_hardware_vram_gb": total_device_vram_gb,
+        "telemetry_semantics": (
+            "pytorch_peak_allocated_mb tracks active tensor memory in PyTorch caching allocator; "
+            "pytorch_peak_reserved_mb tracks memory reserved by PyTorch from OS; "
+            "total_hardware_vram_gb represents physical GPU memory."
+        )
+    }
+
+    # Compile validation diagnostics on the best model checkpoint (Validation only, never test)
+    val_diagnostics = {}
+    if os.path.isfile(checkpoint_mgr.best_checkpoint_path):
+        try:
+            best_ckpt = torch.load(checkpoint_mgr.best_checkpoint_path, map_location=device)
+            model.load_state_dict(best_ckpt["model_state_dict"])
+            model.eval()
+
+            data_dir = dataset_root or config.dataset_dir
+            eval_tf = val_loader.dataset.transform
+            val_diag_ds = FalconDocumentDataset(data_dir, split="validation", transform=eval_tf, return_metadata=True)
+            val_diag_loader = DataLoader(val_diag_ds, batch_size=config.batch_size, shuffle=False)
+
+            cat_counts = defaultdict(lambda: {"tn": 0, "fp": 0, "fn": 0, "tp": 0})
+            tamp_counts = defaultdict(lambda: {"total": 0, "detected": 0, "missed": 0})
+            conf_stats = {"tn": [], "fp": [], "fn": [], "tp": []}
+
+            with torch.inference_mode():
+                for images, targets, metas in val_diag_loader:
+                    images = images.to(device, non_blocking=True)
+                    logits = model(images)
+                    probs = torch.softmax(logits, dim=-1)
+                    preds = torch.argmax(logits, dim=-1)
+
+                    for i in range(len(targets)):
+                        target = int(targets[i].item())
+                        pred = int(preds[i].item())
+                        p_manip = float(probs[i, 1].item())
+                        p_gen = float(probs[i, 0].item())
+                        cat = metas["document_category"][i]
+                        tamp = metas["tampering_type"][i]
+
+                        if target == 0 and pred == 0:
+                            cat_counts[cat]["tn"] += 1
+                            conf_stats["tn"].append(p_gen)
+                        elif target == 0 and pred == 1:
+                            cat_counts[cat]["fp"] += 1
+                            conf_stats["fp"].append(p_manip)
+                        elif target == 1 and pred == 0:
+                            cat_counts[cat]["fn"] += 1
+                            tamp_counts[tamp]["missed"] += 1
+                            tamp_counts[tamp]["total"] += 1
+                            conf_stats["fn"].append(p_gen)
+                        elif target == 1 and pred == 1:
+                            cat_counts[cat]["tp"] += 1
+                            tamp_counts[tamp]["detected"] += 1
+                            tamp_counts[tamp]["total"] += 1
+                            conf_stats["tp"].append(p_manip)
+
+            per_category = {}
+            for cat, c in sorted(cat_counts.items()):
+                tot = c["tp"] + c["tn"] + c["fp"] + c["fn"]
+                acc = (c["tp"] + c["tn"]) / tot if tot > 0 else 0.0
+                rec = c["tp"] / (c["tp"] + c["fn"]) if (c["tp"] + c["fn"]) > 0 else 0.0
+                prec = c["tp"] / (c["tp"] + c["fp"]) if (c["tp"] + c["fp"]) > 0 else 0.0
+                f1 = 2 * (prec * rec) / (prec + rec) if (prec + rec) > 0 else 0.0
+                per_category[cat] = {
+                    "accuracy": round(acc, 4),
+                    "precision": round(prec, 4),
+                    "recall": round(rec, 4),
+                    "f1_score": round(f1, 4),
+                    "confusion_matrix": c
+                }
+
+            per_tampering = {}
+            for tamp, c in sorted(tamp_counts.items()):
+                rec = c["detected"] / c["total"] if c["total"] > 0 else 0.0
+                per_tampering[tamp] = {
+                    "total": c["total"],
+                    "detected": c["detected"],
+                    "missed": c["missed"],
+                    "recall": round(rec, 4)
+                }
+
+            conf_summary = {}
+            for outcome in ["tn", "fp", "fn", "tp"]:
+                vals = conf_stats[outcome]
+                if vals:
+                    conf_summary[outcome] = {
+                        "count": len(vals),
+                        "mean_confidence": round(sum(vals) / len(vals), 4),
+                        "min_confidence": round(min(vals), 4),
+                        "max_confidence": round(max(vals), 4),
+                    }
+                else:
+                    conf_summary[outcome] = {"count": 0, "mean_confidence": None}
+
+            val_diagnostics = {
+                "per_category": per_category,
+                "per_tampering_type": per_tampering,
+                "confidence_summary": conf_summary
+            }
+        except Exception as diag_err:
+            logger.warning(f"Failed to compile post-training validation diagnostics: {diag_err}")
+
     final_summary = {
         "status": "COMPLETED",
+        "experiment_name": config.experiment_name,
         "best_epoch": best_epoch,
-        "best_val_loss": best_val_loss,
+        "best_val_loss": round(float(best_val_loss), 6),
         "best_val_metrics": best_val_metrics,
-        "best_checkpoint_path": checkpoint_mgr.best_checkpoint_path,
-        "latest_checkpoint_path": checkpoint_mgr.latest_checkpoint_path,
-        "log_csv_path": exp_logger.csv_path,
-        "metadata_json_path": exp_logger.meta_path
+        "validation_diagnostics": val_diagnostics,
+        "early_stopped": bool(early_stopper.early_stop),
+        "total_epochs_executed": epoch,
+        "peak_vram_mb": peak_allocated_mb,
+        "cuda_telemetry": cuda_telemetry,
+        "checkpoints": {
+            "best_checkpoint": os.path.join(exp_dir, "best_model.pt"),
+            "latest_checkpoint": os.path.join(exp_dir, "latest_checkpoint.pt"),
+        },
+        "artifacts": {
+            "epoch_metrics_csv": os.path.join(exp_dir, "epoch_metrics.csv"),
+            "experiment_meta_json": os.path.join(exp_dir, "experiment_meta.json"),
+            "training_summary_json": os.path.join(exp_dir, "training_summary.json"),
+            "training_curves_png": os.path.join(exp_dir, "training_curves.png"),
+            "confusion_matrix_png": os.path.join(exp_dir, "confusion_matrix_validation.png"),
+        }
     }
 
     # Final metadata update
@@ -411,11 +573,51 @@ def run_training(
         final_summary=final_summary
     )
 
+    # 11. Copy/Expose root-level artifacts in ml/experiments/<experiment_id>/
+    root_best_pt = os.path.join(exp_dir, "best_model.pt")
+    root_latest_pt = os.path.join(exp_dir, "latest_checkpoint.pt")
+    root_csv = os.path.join(exp_dir, "epoch_metrics.csv")
+    root_meta = os.path.join(exp_dir, "experiment_meta.json")
+    root_summary = os.path.join(exp_dir, "training_summary.json")
+
+    if os.path.isfile(checkpoint_mgr.best_checkpoint_path):
+        shutil.copyfile(checkpoint_mgr.best_checkpoint_path, root_best_pt)
+    if os.path.isfile(checkpoint_mgr.latest_checkpoint_path):
+        shutil.copyfile(checkpoint_mgr.latest_checkpoint_path, root_latest_pt)
+    if os.path.isfile(exp_logger.csv_path):
+        shutil.copyfile(exp_logger.csv_path, root_csv)
+    if os.path.isfile(exp_logger.meta_path):
+        shutil.copyfile(exp_logger.meta_path, root_meta)
+
+    with open(root_summary, "w", encoding="utf-8") as f:
+        json.dump(final_summary, f, indent=2)
+
+    # 12. Render Visual Artifacts
+    curves_path = os.path.join(exp_dir, "training_curves.png")
+    cm_path = os.path.join(exp_dir, "confusion_matrix_validation.png")
+    try:
+        plot_training_curves(root_csv, curves_path, title=f"Experiment {config.experiment_name}")
+        if best_val_metrics and "confusion_matrix" in best_val_metrics:
+            plot_confusion_matrix_heatmap(
+                best_val_metrics["confusion_matrix"],
+                cm_path,
+                title=f"Best Validation Epoch {best_epoch}"
+            )
+    except Exception as viz_err:
+        logger.warning(f"Failed to generate plots: {viz_err}")
+
     print("\n" + "=" * 70)
     print("TRAINING RUN COMPLETE")
-    print(f"Best Epoch: {best_epoch} (Val Loss: {best_val_loss:.4f})")
-    print(f"Best Model Checkpoint: {checkpoint_mgr.best_checkpoint_path}")
-    print(f"Metrics CSV:           {exp_logger.csv_path}")
+    print(f"Experiment ID:         {config.experiment_name}")
+    print(f"Best Epoch:            {best_epoch} (Val Loss: {best_val_loss:.4f})")
+    print(f"Best Val Accuracy:     {best_val_metrics.get('accuracy', 0.0)*100:.2f}%")
+    print(f"Best Val F1-Score:     {best_val_metrics.get('f1_score', 0.0)*100:.2f}%")
+    print(f"Peak VRAM (Active Tensors): {peak_allocated_mb:.2f} MB")
+    print(f"Peak VRAM (PyTorch Cache):  {peak_reserved_mb:.2f} MB")
+    print(f"Hardware VRAM Total:        {total_device_vram_gb} GB")
+    print(f"Best Model:            {root_best_pt}")
+    print(f"Training Curves:       {curves_path}")
+    print(f"Confusion Matrix Plot: {cm_path}")
     print("=" * 70)
 
     return final_summary

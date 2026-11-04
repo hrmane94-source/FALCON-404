@@ -1,6 +1,6 @@
 """
 FALCON-404: Centralized Training & Experiment Configuration
-Phase: 7.2A.3 — Training Pipeline Development
+Phase: 7.2A.3 â€” Training Pipeline Development
 Author: Lead Developer & System Architect: Harshad Mane
 
 Description:
@@ -48,6 +48,7 @@ class BaselineConfig:
     dropout_rate: float = 0.2
     freeze_features: bool = True  # Frozen backbone by default for initial linear probe
     unfreeze_upper_layers: Optional[int] = None  # Set to e.g. 3 for upper-layer fine-tuning
+    backbone_lr: Optional[float] = None  # Differential learning rate for unfrozen backbone layers
 
     # Optimization Hyperparameters
     batch_size: int = 16
@@ -109,6 +110,9 @@ class BaselineConfig:
         if self.unfreeze_upper_layers is not None and self.unfreeze_upper_layers < 0:
             raise ValueError(f"unfreeze_upper_layers must be >= 0 or None, got {self.unfreeze_upper_layers}")
 
+        if self.backbone_lr is not None and self.backbone_lr <= 0:
+            raise ValueError(f"backbone_lr must be > 0 or None, got {self.backbone_lr}")
+
     def to_dict(self) -> Dict[str, Any]:
         """Converts configuration to a plain serializable dictionary."""
         return asdict(self)
@@ -124,5 +128,70 @@ class BaselineConfig:
 def get_default_baseline_config() -> BaselineConfig:
     """Returns a validated default BaselineConfig instance."""
     config = BaselineConfig()
+    config.validate()
+    return config
+
+
+def get_pretrained_experiment_config(
+    experiment_name: str = "exp_20261104_pretrained_mobilenet_v3_small",
+    dataset_dir: str = "ml_data/FALCON_404_DATASET_v1.0"
+) -> BaselineConfig:
+    """Returns a validated BaselineConfig configured for ImageNet-pretrained transfer learning."""
+    config = BaselineConfig(
+        experiment_name=experiment_name,
+        dataset_dir=dataset_dir,
+        model_name="mobilenet_v3_small",
+        num_classes=2,
+        pretrained=True,
+        weights="DEFAULT",
+        freeze_features=True,
+        unfreeze_upper_layers=None,
+        batch_size=16,
+        num_epochs=30,
+        learning_rate=0.0001,
+        weight_decay=0.0001,
+        random_seed=404,
+        deterministic=True,
+        mixed_precision=True,
+        image_size=(224, 224),
+        aspect_ratio_preserve=False,
+        early_stopping_patience=7,
+        early_stopping_min_delta=0.0005,
+        early_stopping_metric="val_loss",
+        early_stopping_mode="min",
+    )
+    config.validate()
+    return config
+
+
+def get_final_model_experiment_config(
+    experiment_name: str = "exp_20261104_falcon404_final_model",
+    dataset_dir: str = "ml_data/FALCON_404_DATASET_v1.1"
+) -> BaselineConfig:
+    """Returns a validated BaselineConfig configured for the final partial fine-tuning model."""
+    config = BaselineConfig(
+        experiment_name=experiment_name,
+        dataset_dir=dataset_dir,
+        model_name="mobilenet_v3_small",
+        num_classes=2,
+        pretrained=True,
+        weights="DEFAULT",
+        freeze_features=True,
+        unfreeze_upper_layers=3,
+        batch_size=16,
+        num_epochs=30,
+        learning_rate=0.0001,
+        backbone_lr=0.00002,
+        weight_decay=0.0001,
+        random_seed=404,
+        deterministic=True,
+        mixed_precision=True,
+        image_size=(224, 224),
+        aspect_ratio_preserve=False,
+        early_stopping_patience=7,
+        early_stopping_min_delta=0.0005,
+        early_stopping_metric="val_loss",
+        early_stopping_mode="min",
+    )
     config.validate()
     return config

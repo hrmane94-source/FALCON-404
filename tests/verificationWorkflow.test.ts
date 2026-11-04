@@ -39,7 +39,9 @@ import { buildSavedCaseRecord } from '../src/services/caseStorageService.ts'
 import {
   handleApiHealth,
   handleApiCapabilities,
-  handleApiScreenings
+  handleApiScreenings,
+  handleApiMlHealth,
+  handleApiMlPredict
 } from '../server/api.ts'
 
 describe('FALCON-404 :: Verification Status Contract', () => {
@@ -435,5 +437,44 @@ describe('FALCON-404 :: Backend API Contract', () => {
     for (const r of json.validationResults) {
       assert.notStrictEqual(r.status, 'PASS', 'Step 1 must never return PASS')
     }
+  })
+
+  test('GET /api/v1/ml/health gracefully reports 503 when Python ML service is offline', async () => {
+    const req = {} as any
+    const res = new MockResponse()
+    await handleApiMlHealth(req, res as any)
+
+    // ML service is offline during standard unit tests
+    assert.strictEqual(res.statusCode, 503)
+    const json = JSON.parse(res.body)
+    assert.strictEqual(json.error.code, 'ML_SERVICE_UNAVAILABLE')
+    assert.ok(json.error.message.includes('ML inference service'))
+  })
+
+  test('POST /api/v1/ml/predict rejects empty upload payload with 400', async () => {
+    const req = (async function* () {
+      // yield nothing
+    })() as any
+
+    const res = new MockResponse()
+    await handleApiMlPredict(req, res as any)
+
+    assert.strictEqual(res.statusCode, 400)
+    const json = JSON.parse(res.body)
+    assert.strictEqual(json.error.code, 'EMPTY_REQUEST_BODY')
+  })
+
+  test('POST /api/v1/ml/predict gracefully reports 503 when Python ML service is offline', async () => {
+    const req = (async function* () {
+      yield Buffer.from('fake image binary content for testing')
+    })() as any
+    req.headers = { 'content-type': 'image/jpeg' }
+
+    const res = new MockResponse()
+    await handleApiMlPredict(req, res as any)
+
+    assert.strictEqual(res.statusCode, 503)
+    const json = JSON.parse(res.body)
+    assert.strictEqual(json.error.code, 'ML_SERVICE_UNAVAILABLE')
   })
 })

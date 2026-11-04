@@ -11,7 +11,9 @@
  * 5. Multi-dimensional verification summary and reporting structures
  */
 
-import type { CandidateCategory } from './index.ts'
+import type { CandidateCategory, AIMLScreeningResult, AIMLClassificationStatus } from './index.ts'
+
+export type { AIMLScreeningResult, AIMLClassificationStatus }
 
 // ============================================================================
 // 1. STANDARD VERIFICATION STATUSES
@@ -301,7 +303,7 @@ export interface ApiCapabilitiesResponse {
     boundaryAndLayoutAnalysis: 'IMPLEMENTED'
     deterministicIdentifierValidation: 'NOT_IMPLEMENTED'
     documentSpecificProfiles: 'NOT_IMPLEMENTED'
-    trainedMlTamperingDetection: 'NOT_IMPLEMENTED'
+    trainedMlTamperingDetection: 'IMPLEMENTED' | 'NOT_IMPLEMENTED'
     issuerVerification: 'UNAVAILABLE'
   }
   plannedMilestones: {

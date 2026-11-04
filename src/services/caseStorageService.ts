@@ -150,6 +150,7 @@ export function buildSavedCaseRecord(
     },
     integrityFindings,
     layoutFindings,
+    mlResult: reportData.mlResult,
     stationId: stationId?.trim() || undefined,
     developerAttribution: PROJECT_BRANDING.developerAttribution
   }

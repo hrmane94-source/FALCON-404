@@ -11,7 +11,8 @@ import type {
   PerspectiveMetrics,
   FramingMetrics,
   LayoutQualityMetrics,
-  LayoutFinding
+  LayoutFinding,
+  AIMLScreeningResult
 } from './index'
 
 /**
@@ -64,6 +65,9 @@ export interface SavedCaseRecord {
   }
   integrityFindings: IntegrityFinding[]
   layoutFindings: LayoutFinding[]
+
+  // AI/ML Document Tampering Screening (Phase 7.3)
+  mlResult?: AIMLScreeningResult
 
   // Custom examiner metadata & attribution
   stationId?: string

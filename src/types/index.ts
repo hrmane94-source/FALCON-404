@@ -204,6 +204,27 @@ export interface ReportPrivacySettings {
   includeIdentifiableFields: boolean
 }
 
+// ==========================================
+// Phase 7.3: AI/ML Document Manipulation Screening Types
+// ==========================================
+
+export type AIMLClassificationStatus = 'GENUINE' | 'MANIPULATED' | 'NEEDS_REVIEW' | 'ERROR'
+
+export interface AIMLScreeningResult {
+  predictedClass: AIMLClassificationStatus
+  genuineProbability: number
+  manipulatedProbability: number
+  confidence: number
+  tamperingScore: number
+  decisionThreshold: number
+  reviewBand: [number, number]
+  processingTimeMs: number
+  device: string
+  modelIdentifier: string
+  screeningDisclaimer: string
+  error?: string
+}
+
 export interface ScreeningReportData {
   reportId: string
   generatedAt: string
@@ -215,6 +236,7 @@ export interface ScreeningReportData {
   ocrResult?: OCRResult
   integrityResult: ImageIntegrityResult
   layoutResult?: DocumentLayoutResult
+  mlResult?: AIMLScreeningResult
   privacySettings: ReportPrivacySettings
 }
 

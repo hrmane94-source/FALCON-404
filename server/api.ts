@@ -28,32 +28,70 @@ export type {
 
 const SUPPORTED_TYPES = new Set(['Aadhaar', 'PAN', 'Driving Licence', 'Passport', 'Other / Unknown'])
 const SERVER_START_TIME = Date.now()
-const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://127.0.0.1:8000'
+export const getMlServiceUrl = () => (process.env.ML_SERVICE_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '')
 
-export const sendJson = (res: ServerResponse, statusCode: number, data: unknown) => {
+const DEFAULT_ALLOWED_ORIGINS = [
+  'https://falcon-404.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:4040',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:4040'
+]
+
+export const resolveCorsOrigin = (req?: IncomingMessage): string => {
+  const configured = process.env.CORS_ALLOWED_ORIGINS
+    ? process.env.CORS_ALLOWED_ORIGINS.split(',').map((s) => s.trim())
+    : DEFAULT_ALLOWED_ORIGINS
+
+  const origin = req?.headers?.origin
+  if (origin && configured.includes(origin)) {
+    return origin
+  }
+  return 'https://falcon-404.vercel.app'
+}
+
+export const sendJson = (
+  res: ServerResponse,
+  statusCode: number,
+  data: unknown,
+  req?: IncomingMessage
+) => {
+  const allowedOrigin = resolveCorsOrigin(req)
   const payload = JSON.stringify(data, null, 2)
   res.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+    'Vary': 'Origin',
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY'
   })
   res.end(payload)
 }
 
-export const sendError = (res: ServerResponse, statusCode: number, code: string, message: string) => {
-  sendJson(res, statusCode, {
-    error: {
-      code,
-      message,
-      timestamp: new Date().toISOString()
-    }
-  })
+export const sendError = (
+  res: ServerResponse,
+  statusCode: number,
+  code: string,
+  message: string,
+  req?: IncomingMessage
+) => {
+  sendJson(
+    res,
+    statusCode,
+    {
+      error: {
+        code,
+        message,
+        timestamp: new Date().toISOString()
+      }
+    },
+    req
+  )
 }
 
-export const handleApiHealth = (_req: IncomingMessage, res: ServerResponse) => {
+export const handleApiHealth = (req: IncomingMessage, res: ServerResponse) => {
   const healthData: ApiHealthResponse = {
     status: 'HEALTHY',
     service: 'FALCON-404 Forensic Verification API',
@@ -62,10 +100,10 @@ export const handleApiHealth = (_req: IncomingMessage, res: ServerResponse) => {
     environment: process.env.NODE_ENV || 'development',
     uptimeSeconds: Math.floor((Date.now() - SERVER_START_TIME) / 1000)
   }
-  sendJson(res, 200, healthData)
+  sendJson(res, 200, healthData, req)
 }
 
-export const handleApiCapabilities = (_req: IncomingMessage, res: ServerResponse) => {
+export const handleApiCapabilities = (req: IncomingMessage, res: ServerResponse) => {
   const isMlEnabled = process.env.ML_SERVICE_ENABLED === 'true'
   const capabilitiesData: ApiCapabilitiesResponse = {
     system: 'FALCON-404 Document Screening Platform',
@@ -91,23 +129,23 @@ export const handleApiCapabilities = (_req: IncomingMessage, res: ServerResponse
       'Statutory verification gateways are not connected in this demonstration release.'
     ]
   }
-  sendJson(res, 200, capabilitiesData)
+  sendJson(res, 200, capabilitiesData, req)
 }
 
-export const handleApiMlHealth = async (_req: IncomingMessage, res: ServerResponse) => {
+export const handleApiMlHealth = async (req: IncomingMessage, res: ServerResponse) => {
   try {
-    const mlRes = await fetch(`${ML_SERVICE_URL}/health`, {
+    const mlRes = await fetch(`${getMlServiceUrl()}/health`, {
       method: 'GET',
       headers: { Accept: 'application/json' }
     })
     if (!mlRes.ok) {
-      sendError(res, mlRes.status, 'ML_SERVICE_ERROR', `ML inference service returned status ${mlRes.status}.`)
+      sendError(res, mlRes.status, 'ML_SERVICE_ERROR', `ML inference service returned status ${mlRes.status}.`, req)
       return
     }
     const data = await mlRes.json()
-    sendJson(res, 200, data)
+    sendJson(res, 200, data, req)
   } catch (err: any) {
-    sendError(res, 503, 'ML_SERVICE_UNAVAILABLE', 'Python ML inference service is offline or unreachable.')
+    sendError(res, 503, 'ML_SERVICE_UNAVAILABLE', 'Python ML inference service is offline or unreachable.', req)
   }
 }
 
@@ -120,21 +158,21 @@ export const handleApiMlPredict = async (req: IncomingMessage, res: ServerRespon
     for await (const chunk of req) {
       totalBytes += chunk.length
       if (totalBytes > MAX_UPLOAD_BYTES) {
-        sendError(res, 413, 'PAYLOAD_TOO_LARGE', 'Uploaded document exceeds 10MB limit.')
+        sendError(res, 413, 'PAYLOAD_TOO_LARGE', 'Uploaded document exceeds 10MB limit.', req)
         return
       }
       chunks.push(chunk)
     }
 
     if (totalBytes === 0) {
-      sendError(res, 400, 'EMPTY_REQUEST_BODY', 'Request payload cannot be empty.')
+      sendError(res, 400, 'EMPTY_REQUEST_BODY', 'Request payload cannot be empty.', req)
       return
     }
 
     const bodyBuffer = Buffer.concat(chunks)
     const contentType = req.headers['content-type'] || 'application/octet-stream'
 
-    const mlRes = await fetch(`${ML_SERVICE_URL}/predict`, {
+    const mlRes = await fetch(`${getMlServiceUrl()}/predict`, {
       method: 'POST',
       headers: {
         'Content-Type': contentType,
@@ -144,9 +182,9 @@ export const handleApiMlPredict = async (req: IncomingMessage, res: ServerRespon
     })
 
     const mlData = await mlRes.json()
-    sendJson(res, mlRes.status, mlData)
+    sendJson(res, mlRes.status, mlData, req)
   } catch (err: any) {
-    sendError(res, 503, 'ML_SERVICE_UNAVAILABLE', 'Python ML inference service is offline or unreachable.')
+    sendError(res, 503, 'ML_SERVICE_UNAVAILABLE', 'Python ML inference service is offline or unreachable.', req)
   }
 }
 
@@ -159,13 +197,13 @@ export const handleApiScreenings = async (req: IncomingMessage, res: ServerRespo
     for await (const chunk of req) {
       bodyBuffer += chunk
       if (bodyBuffer.length > MAX_PAYLOAD_BYTES) {
-        sendError(res, 413, 'PAYLOAD_TOO_LARGE', 'Screening request payload exceeds 2MB limit.')
+        sendError(res, 413, 'PAYLOAD_TOO_LARGE', 'Screening request payload exceeds 2MB limit.', req)
         return
       }
     }
 
     if (!bodyBuffer.trim()) {
-      sendError(res, 400, 'EMPTY_REQUEST_BODY', 'Request body must contain valid JSON screening data.')
+      sendError(res, 400, 'EMPTY_REQUEST_BODY', 'Request body must contain valid JSON screening data.', req)
       return
     }
 
@@ -173,14 +211,14 @@ export const handleApiScreenings = async (req: IncomingMessage, res: ServerRespo
     try {
       parsed = JSON.parse(bodyBuffer)
     } catch {
-      sendError(res, 400, 'MALFORMED_JSON', 'Request payload could not be parsed as valid JSON.')
+      sendError(res, 400, 'MALFORMED_JSON', 'Request payload could not be parsed as valid JSON.', req)
       return
     }
 
     const { documentType, fields = [], sessionReference } = parsed as ScreeningRequestBody
 
     if (!documentType || typeof documentType !== 'string') {
-      sendError(res, 400, 'MISSING_DOCUMENT_TYPE', 'Field "documentType" is required.')
+      sendError(res, 400, 'MISSING_DOCUMENT_TYPE', 'Field "documentType" is required.', req)
       return
     }
 
@@ -189,13 +227,14 @@ export const handleApiScreenings = async (req: IncomingMessage, res: ServerRespo
         res,
         400,
         'UNSUPPORTED_DOCUMENT_TYPE',
-        `Document type "${documentType}" is not supported. Supported types: ${Array.from(SUPPORTED_TYPES).join(', ')}.`
+        `Document type "${documentType}" is not supported. Supported types: ${Array.from(SUPPORTED_TYPES).join(', ')}.`,
+        req
       )
       return
     }
 
     if (!Array.isArray(fields)) {
-      sendError(res, 400, 'INVALID_FIELDS_FORMAT', 'Field "fields" must be an array of extracted document fields.')
+      sendError(res, 400, 'INVALID_FIELDS_FORMAT', 'Field "fields" must be an array of extracted document fields.', req)
       return
     }
 
@@ -272,8 +311,8 @@ export const handleApiScreenings = async (req: IncomingMessage, res: ServerRespo
       disclaimer: 'This screening response is provided for technical development and evaluation purposes only.'
     }
 
-    sendJson(res, 200, responseData)
+    sendJson(res, 200, responseData, req)
   } catch (err: any) {
-    sendError(res, 500, 'INTERNAL_SERVER_ERROR', 'An unexpected error occurred while processing the screening request.')
+    sendError(res, 500, 'INTERNAL_SERVER_ERROR', 'An unexpected error occurred while processing the screening request.', req)
   }
 }

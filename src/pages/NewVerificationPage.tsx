@@ -11,7 +11,10 @@ import {
   AlertTriangle,
   Sparkles,
   ShieldCheck,
-  CheckCircle2
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Sliders
 } from 'lucide-react'
 import type {
   NavigationSection,
@@ -40,8 +43,6 @@ import { ImageIntegritySection } from '../components/integrity/ImageIntegritySec
 import { DocumentLayoutSection } from '../components/layout/DocumentLayoutSection'
 import { DocumentBoundaryOverlay } from '../components/layout/DocumentBoundaryOverlay'
 import { ScreeningReportSection } from '../components/report/ScreeningReportSection'
-import { DocumentIdentifierValidationSection } from '../components/validation/DocumentIdentifierValidationSection'
-import { VerificationSummaryPanel } from '../components/validation/VerificationSummaryPanel'
 import { performOCR } from '../services/ocrService'
 import { performImageIntegrityAnalysis } from '../services/imageIntegrityService'
 import { performDocumentLayoutAnalysis } from '../services/documentLayoutService'
@@ -97,6 +98,7 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
   const [mlStatus, setMlStatus] = useState<'idle' | 'analyzing' | 'success' | 'error'>('idle')
   const [mlResult, setMlResult] = useState<AIMLScreeningResult | null>(null)
   const [mlError, setMlError] = useState<string | null>(null)
+  const [showTechnicalTelemetry, setShowTechnicalTelemetry] = useState(false)
 
 
   const handleSelectDocType = (type: SupportedDocumentType, mode: 'manual' | 'ocr-inferred' = 'manual') => {
@@ -845,61 +847,6 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
             </div>
           </Card>
 
-          {/* STAGE 02: Client-Side OCR Analysis Section */}
-          <OCRAnalysisSection
-            ocrStatus={ocrStatus}
-            ocrProgress={ocrProgress}
-            ocrResult={ocrResult}
-            ocrError={ocrError}
-            disabled={isProcessing}
-            onRunOCR={handleRunOCR}
-            onRetryOCR={handleRunOCR}
-            onUpdateField={handleUpdateField}
-          />
-
-          {/* STAGE 03: Image Integrity, Quality, and ELA Section */}
-          <ImageIntegritySection
-            status={integrityStatus}
-            progress={integrityProgress}
-            result={integrityResult}
-            error={integrityError}
-            disabled={isProcessing}
-            onRunAnalysis={handleRunIntegrity}
-            onRetryAnalysis={handleRunIntegrity}
-          />
-
-          {/* STAGE 04: Document Boundary, Perspective, and Layout Section */}
-          <DocumentLayoutSection
-            status={layoutStatus}
-            progress={layoutProgress}
-            result={layoutResult}
-            error={layoutError}
-            disabled={isProcessing}
-            onRunAnalysis={() => handleRunLayout()}
-            onRetryAnalysis={() => handleRunLayout()}
-          />
-
-          {/* STAGE 04-B: Deterministic Identifier Validation Section */}
-          {workflowDossier && (
-            <DocumentIdentifierValidationSection
-              documentType={selectedSupportedDocType}
-              extractedIdentifierField={workflowDossier.extractedFields.find(
-                (f) => f.category === 'identifier' || f.fieldName === 'identifier'
-              )}
-              validationResults={workflowDossier.identifierValidationResults}
-              disabled={isProcessing}
-            />
-          )}
-
-          {/* STAGE 05-A: Comprehensive Multi-Dimension Verification Summary */}
-          {workflowDossier && (
-            <VerificationSummaryPanel
-              documentType={selectedSupportedDocType}
-              summary={workflowDossier.verificationSummary}
-              allValidationChecks={workflowDossier.identifierValidationResults}
-            />
-          )}
-
           {/* AUTO-SAVE CONFIRMATION & NOTIFICATION BANNER */}
           {autoSaveStatus === 'saved' && (
             <div className="p-4 rounded-xl bg-emerald-500/10 dark:bg-emerald-950/40 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-mono text-xs text-emerald-900 dark:text-emerald-200 animate-in fade-in">
@@ -966,7 +913,7 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
             </div>
           )}
 
-          {/* PRELIMINARY SCREENING REPORT DOSSIER */}
+          {/* REDESIGNED SCREENING REPORT DOSSIER (SECTIONS 1 TO 5) */}
           {integrityResult && (
             <ScreeningReportSection
               documentName={uploadedDoc.name}
@@ -983,6 +930,94 @@ export const NewVerificationPage: React.FC<NewVerificationPageProps> = ({ onNavi
               autoSaveError={autoSaveError}
               onRetryAutoSave={handleRetryAutoSave}
             />
+          )}
+
+          {/* TECHNICAL PIPELINE TELEMETRY ACCORDION */}
+          {integrityResult ? (
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setShowTechnicalTelemetry((prev) => !prev)}
+                className="w-full flex items-center justify-between p-3.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 font-mono text-xs text-slate-700 dark:text-slate-300 font-bold uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <Sliders className="w-4 h-4 text-orange-500" />
+                  <span>DETAILED PIPELINE TELEMETRY (OCR, ELA & SOBEL CANVASES)</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-normal">
+                  <span>{showTechnicalTelemetry ? 'HIDE TELEMETRY' : 'EXPAND TELEMETRY'}</span>
+                  {showTechnicalTelemetry ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </div>
+              </button>
+
+              {showTechnicalTelemetry && (
+                <div className="space-y-6 mt-4 animate-in fade-in">
+                  <OCRAnalysisSection
+                    ocrStatus={ocrStatus}
+                    ocrProgress={ocrProgress}
+                    ocrResult={ocrResult}
+                    ocrError={ocrError}
+                    disabled={isProcessing}
+                    onRunOCR={handleRunOCR}
+                    onRetryOCR={handleRunOCR}
+                    onUpdateField={handleUpdateField}
+                  />
+
+                  <ImageIntegritySection
+                    status={integrityStatus}
+                    progress={integrityProgress}
+                    result={integrityResult}
+                    error={integrityError}
+                    disabled={isProcessing}
+                    onRunAnalysis={handleRunIntegrity}
+                    onRetryAnalysis={handleRunIntegrity}
+                  />
+
+                  <DocumentLayoutSection
+                    status={layoutStatus}
+                    progress={layoutProgress}
+                    result={layoutResult}
+                    error={layoutError}
+                    disabled={isProcessing}
+                    onRunAnalysis={() => handleRunLayout()}
+                    onRetryAnalysis={() => handleRunLayout()}
+                  />
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <OCRAnalysisSection
+                ocrStatus={ocrStatus}
+                ocrProgress={ocrProgress}
+                ocrResult={ocrResult}
+                ocrError={ocrError}
+                disabled={isProcessing}
+                onRunOCR={handleRunOCR}
+                onRetryOCR={handleRunOCR}
+                onUpdateField={handleUpdateField}
+              />
+
+              <ImageIntegritySection
+                status={integrityStatus}
+                progress={integrityProgress}
+                result={integrityResult}
+                error={integrityError}
+                disabled={isProcessing}
+                onRunAnalysis={handleRunIntegrity}
+                onRetryAnalysis={handleRunIntegrity}
+              />
+
+              <DocumentLayoutSection
+                status={layoutStatus}
+                progress={layoutProgress}
+                result={layoutResult}
+                error={layoutError}
+                disabled={isProcessing}
+                onRunAnalysis={() => handleRunLayout()}
+                onRetryAnalysis={() => handleRunLayout()}
+              />
+            </div>
           )}
 
           {/* Bottom Navigation & Action Bar */}

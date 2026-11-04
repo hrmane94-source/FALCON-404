@@ -1,16 +1,18 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   FileText,
   Download,
-  ShieldAlert,
+  ShieldCheck,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  Cpu,
+  Lock,
   Sliders,
   Sparkles,
   Scan,
-  Lock,
   Archive,
-  CheckCircle2,
-  AlertTriangle,
-  Cpu
+  Zap
 } from 'lucide-react'
 import type {
   ScreeningReportData,
@@ -55,7 +57,7 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
   ocrResult,
   integrityResult,
   layoutResult,
-  workflowDossier,
+  workflowDossier: _workflowDossier,
   mlResult,
   disabled = false,
   reportId: passedReportId,
@@ -71,7 +73,9 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null)
 
   // Stable report ID: use passed ID from screening session or fallback to local stable ID
-  const [localReportId] = useState(() => `FLC-${Math.random().toString(36).substring(2, 8).toUpperCase()}-${Date.now().toString().slice(-4)}`)
+  const [localReportId] = useState(
+    () => `FLC-${Math.random().toString(36).substring(2, 8).toUpperCase()}-${Date.now().toString().slice(-4)}`
+  )
   const reportId = passedReportId || localReportId
   const [nowFormatted] = useState(() => new Date().toLocaleString())
 
@@ -137,220 +141,337 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
 
   const { quality, metadata, ela, assessment } = integrityResult
 
+  // =========================================================================
+  // SECTION 1: Document Risk Assessment Logic
+  // =========================================================================
+  const riskAssessment = useMemo(() => {
+    if (mlResult && mlResult.predictedClass !== 'ERROR') {
+      const score = Math.round(mlResult.tamperingScore * 100)
+      let level: 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW'
+      let levelLabel = 'LOW RISK'
+      let badgeVariant: 'success' | 'warning' | 'danger' = 'success'
+      let interpretation =
+        'No visual manipulation or tampering patterns detected across neural feature extractors. Document exhibits consistent forensic properties.'
+
+      if (mlResult.predictedClass === 'MANIPULATED' || score > 60) {
+        level = 'HIGH'
+        levelLabel = 'HIGH RISK'
+        badgeVariant = 'danger'
+        interpretation =
+          'High probability of image tampering detected by neural feature analysis. Close examiner review of facial portrait, typography, and background integrity is required.'
+      } else if (mlResult.predictedClass === 'NEEDS_REVIEW' || (score >= 40 && score <= 60)) {
+        level = 'MEDIUM'
+        levelLabel = 'MEDIUM RISK'
+        badgeVariant = 'warning'
+        interpretation =
+          'Ambiguous tampering indicators detected near the classification boundary. Corroborating physical inspection is advised.'
+      }
+
+      return {
+        hasScore: true,
+        score,
+        level,
+        levelLabel,
+        badgeVariant,
+        interpretation,
+        isMlBacked: true
+      }
+    }
+
+    // Heuristic fallback if ML is offline or not run
+    const priority = assessment.priority
+    if (priority === 'manual-review') {
+      return {
+        hasScore: false,
+        score: null,
+        level: 'HIGH' as const,
+        levelLabel: 'HIGH RISK (MANUAL REVIEW)',
+        badgeVariant: 'warning' as const,
+        interpretation: assessment.summary,
+        isMlBacked: false
+      }
+    }
+    if (priority === 'inconclusive') {
+      return {
+        hasScore: false,
+        score: null,
+        level: 'MEDIUM' as const,
+        levelLabel: 'MEDIUM RISK (INCONCLUSIVE)',
+        badgeVariant: 'neutral' as const,
+        interpretation: assessment.summary,
+        isMlBacked: false
+      }
+    }
+    return {
+      hasScore: false,
+      score: null,
+      level: 'LOW' as const,
+      levelLabel: 'LOW RISK (STANDARD)',
+      badgeVariant: 'success' as const,
+      interpretation: assessment.summary,
+      isMlBacked: false
+    }
+  }, [mlResult, assessment])
+
+  // =========================================================================
+  // SECTION 4: Implemented & Executed Verification Checks
+  // =========================================================================
+  const executedChecks = useMemo(() => {
+    const checks: Array<{
+      id: string
+      name: string
+      category: string
+      status: 'PASS' | 'FAIL' | 'NEEDS_REVIEW'
+      detail: string
+    }> = []
+
+    // 1. Image Resolution & Dimension
+    checks.push({
+      id: 'chk-res',
+      name: 'Raster Resolution & Matrix Size',
+      category: 'Raster Geometry',
+      status: quality.isLowResolution ? 'NEEDS_REVIEW' : 'PASS',
+      detail: `${quality.width} × ${quality.height} px (${quality.isLowResolution ? 'Sub-optimal resolution' : 'Adequate for OCR & forensics'})`
+    })
+
+    // 2. Exposure & Contrast Dynamic Range
+    checks.push({
+      id: 'chk-lum',
+      name: 'Photometric Exposure & Contrast',
+      category: 'Photometric Quality',
+      status: quality.isExtremeLuminance || quality.isLowContrast ? 'NEEDS_REVIEW' : 'PASS',
+      detail: `Luminance: ${quality.meanLuminance}/255 • Contrast: ${quality.contrastStdDev} (${quality.isExtremeLuminance ? 'Extreme' : 'Balanced'})`
+    })
+
+    // 3. Laplacian Edge Sharpness / Focus
+    checks.push({
+      id: 'chk-blur',
+      name: 'Laplacian Edge Sharpness & Focus',
+      category: 'Optical Quality',
+      status: quality.isPotentialBlur ? 'NEEDS_REVIEW' : 'PASS',
+      detail: `Variance score: ${quality.blurScore} (${quality.isPotentialBlur ? 'Potential blur detected' : 'Sharp & in-focus'})`
+    })
+
+    // 4. Container Format & Metadata Signature
+    checks.push({
+      id: 'chk-meta',
+      name: 'Metadata Container & Software Signature',
+      category: 'File Structure',
+      status: metadata.softwareDetected ? 'NEEDS_REVIEW' : 'PASS',
+      detail: `${metadata.format} • ${metadata.softwareDetected ? metadata.softwareStatusLabel : 'No editing signatures detected'}`
+    })
+
+    // 5. Compression Artifacts (ELA)
+    checks.push({
+      id: 'chk-ela',
+      name: 'Compression Consistency (ELA)',
+      category: 'Compression Forensics',
+      status: ela.supported && ela.variance > 0.15 ? 'NEEDS_REVIEW' : 'PASS',
+      detail: ela.supported
+        ? `Variance: ${(ela.variance * 100).toFixed(1)}% (${ela.variance > 0.15 ? 'High error variance' : 'Uniform compression'})`
+        : 'Non-JPEG container (compression analysis skipped)'
+    })
+
+    // 6. Optical Character Recognition (OCR)
+    checks.push({
+      id: 'chk-ocr',
+      name: 'Surface OCR Transcription & Field Parsing',
+      category: 'Content Extraction',
+      status:
+        ocrStatus === 'success' && (ocrResult?.confidence ?? 0) >= 60
+          ? 'PASS'
+          : ocrStatus === 'error'
+          ? 'FAIL'
+          : 'NEEDS_REVIEW',
+      detail:
+        ocrStatus === 'success'
+          ? `${ocrResult?.confidence ?? 0}% confidence (${ocrResult?.candidateFields.length ?? 0} candidate fields recognized)`
+          : `OCR status: ${ocrStatus.toUpperCase()}`
+    })
+
+    // 7. Document Boundary & Containment (if executed)
+    if (layoutResult) {
+      checks.push({
+        id: 'chk-layout',
+        name: 'Perimeter Boundary & Perspective Skew',
+        category: 'Spatial Geometry',
+        status: layoutResult.status === 'boundary-detected' ? 'PASS' : 'NEEDS_REVIEW',
+        detail: `${layoutResult.statusLabel} (${layoutResult.detectorScore}/100) • ${layoutResult.layoutQuality.containmentFormatted} contained`
+      })
+    }
+
+    // 8. AI Neural Tampering Classification (if executed)
+    if (mlResult && mlResult.predictedClass !== 'ERROR') {
+      checks.push({
+        id: 'chk-ml',
+        name: 'Neural Document Tampering Detection',
+        category: 'AI Classifier',
+        status:
+          mlResult.predictedClass === 'GENUINE'
+            ? 'PASS'
+            : mlResult.predictedClass === 'MANIPULATED'
+            ? 'FAIL'
+            : 'NEEDS_REVIEW',
+        detail: `${mlResult.predictedClass} (P(Tampered): ${(mlResult.manipulatedProbability * 100).toFixed(1)}%, ${(mlResult.confidence * 100).toFixed(1)}% confidence)`
+      })
+    }
+
+    return checks
+  }, [quality, metadata, ela, ocrStatus, ocrResult, layoutResult, mlResult])
+
+  const passedChecks = executedChecks.filter((c) => c.status === 'PASS')
+  const failedChecks = executedChecks.filter((c) => c.status === 'FAIL')
+  const reviewChecks = executedChecks.filter((c) => c.status === 'NEEDS_REVIEW')
+
   return (
     <Card
-      sectionCode="STAGE // 05"
-      title="Preliminary Screening Dossier"
-      subtitle={`Generated ${nowFormatted} • Dossier Ref: ${reportId} • ${PROJECT_BRANDING.developerAttribution}`}
+      sectionCode="VERIFICATION // DOSSIER"
+      title="Document Screening & Forensic Audit Report"
+      subtitle={`Generated ${nowFormatted} • Case Ref: ${reportId} • Specimen: ${documentName}`}
       action={
         <div className="flex items-center gap-2 font-mono">
-          {assessment.priority === 'standard' && (
-            <Badge variant="success" size="sm">
-              STANDARD TRIAGE
-            </Badge>
-          )}
-          {assessment.priority === 'manual-review' && (
-            <Badge variant="warning" size="sm">
-              MANUAL REVIEW REQUIRED
-            </Badge>
-          )}
-          {assessment.priority === 'inconclusive' && (
-            <Badge variant="neutral" size="sm">
-              INCONCLUSIVE
-            </Badge>
-          )}
+          <Badge variant={riskAssessment.badgeVariant} size="sm">
+            {riskAssessment.levelLabel}
+          </Badge>
         </div>
       }
     >
       <div className="space-y-6 font-sans">
-        {/* SECTION A: INTAKE OVERVIEW */}
-        <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 space-y-3 font-mono">
-          <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800 pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-              SECTION A // INTAKE SPECIFICATIONS
+        {/* ================================================================= */}
+        {/* SECTION 1 — DOCUMENT RISK ASSESSMENT                              */}
+        {/* ================================================================= */}
+        <section className="p-5 rounded-xl bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900/90 dark:via-slate-950 dark:to-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-200/70 dark:border-slate-800 gap-2">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              <h3 className="font-heading text-sm font-bold tracking-wider uppercase text-slate-900 dark:text-slate-100">
+                SECTION 1 // DOCUMENT RISK ASSESSMENT
+              </h3>
+            </div>
+            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+              OPERATIONAL EXAMINER TRIAGE
             </span>
-            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">{integrityResult.fileProperties.fileName}</span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-            <div>
-              <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block">STANDARD SELECTED</span>
-              <span className="font-bold text-slate-900 dark:text-slate-100">{selectedDocumentType}</span>
-            </div>
-            <div>
-              <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block">OCR CLASSIFICATION</span>
-              <span className="font-bold text-slate-800 dark:text-slate-200">
-                {detectedDocTypeField ? detectedDocTypeField.value : 'UNCLASSIFIED'}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
+            {/* Visual Risk Score Indicator (0-100) */}
+            <div className="md:col-span-4 flex flex-col items-center justify-center p-4 rounded-xl bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 text-center space-y-2">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                OVERALL TAMPERING RISK SCORE
               </span>
-            </div>
-            <div>
-              <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block">OCR STATUS</span>
-              <span className="font-bold text-slate-800 dark:text-slate-200">
-                {ocrStatus === 'success' ? `COMPLETE (${ocrResult?.confidence ?? 'N/A'}% QUAL)` : ocrStatus.toUpperCase()}
-              </span>
-            </div>
-            <div>
-              <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block">RASTER MATRIX</span>
-              <span className="font-bold text-slate-800 dark:text-slate-200">
-                {quality.width} × {quality.height} • {metadata.format}
-              </span>
-            </div>
-          </div>
-        </div>
 
-        {/* SECTION B & C: QUALITY & FORENSIC CHECKS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-          {/* Quality Audit Column */}
-          <div className="p-4 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-2.5">
-            <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-slate-800 pb-2">
-              <Sliders className="w-3.5 h-3.5 text-orange-500" />
-              <span>SECTION B // RASTER METRICS</span>
-            </div>
+              {riskAssessment.hasScore ? (
+                <div className="relative flex items-center justify-center my-1">
+                  <div
+                    className={`w-28 h-28 rounded-full border-8 flex flex-col items-center justify-center transition-all ${
+                      riskAssessment.level === 'HIGH'
+                        ? 'border-rose-500 bg-rose-500/5 text-rose-600 dark:text-rose-400'
+                        : riskAssessment.level === 'MEDIUM'
+                        ? 'border-amber-500 bg-amber-500/5 text-amber-600 dark:text-amber-400'
+                        : 'border-emerald-500 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400'
+                    }`}
+                  >
+                    <span className="text-3xl font-heading font-black tracking-tight leading-none">
+                      {riskAssessment.score}
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500 mt-0.5">
+                      / 100
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="my-3 px-4 py-3 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <span className="font-heading font-bold text-base text-slate-800 dark:text-slate-200">
+                    HEURISTIC TRIAGE
+                  </span>
+                </div>
+              )}
 
-            <div className="space-y-1.5 text-[11px]">
-              <div className="flex justify-between">
-                <span className="text-slate-400 dark:text-slate-500">DIMENSIONS:</span>
-                <span className={quality.isLowResolution ? 'font-bold text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200 font-bold'}>
-                  {quality.width} × {quality.height} PX {quality.isLowResolution ? '(SUB-OPTIMAL)' : '(ADEQUATE)'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 dark:text-slate-500">ASPECT RATIO:</span>
-                <span className="text-slate-800 dark:text-slate-200 font-bold">
-                  {quality.aspectRatio} ({quality.aspectRatioLabel})
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 dark:text-slate-500">LUMINANCE:</span>
-                <span className={quality.isExtremeLuminance ? 'font-bold text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200 font-bold'}>
-                  {quality.meanLuminance} / 255 {quality.isExtremeLuminance ? '(EXTREME)' : '(BALANCED)'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 dark:text-slate-500">RMS CONTRAST:</span>
-                <span className={quality.isLowContrast ? 'font-bold text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200 font-bold'}>
-                  {quality.contrastStdDev} {quality.isLowContrast ? '(COMPRESSED)' : '(OPTIMAL)'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 dark:text-slate-500">LAPLACIAN SHARPNESS:</span>
-                <span className={quality.isPotentialBlur ? 'font-bold text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200 font-bold'}>
-                  {quality.blurScore} {quality.isPotentialBlur ? '(POTENTIAL BLUR)' : '(SHARP)'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Forensic Checks Column */}
-          <div className="p-4 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-2.5">
-            <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-slate-800 pb-2">
-              <Sparkles className="w-3.5 h-3.5 text-purple-500" />
-              <span>SECTION C // FORENSIC INTEGRITY</span>
-            </div>
-
-            <div className="space-y-1.5 text-[11px]">
-              <div className="flex justify-between">
-                <span className="text-slate-400 dark:text-slate-500">CONTAINER FORMAT:</span>
-                <span className="text-slate-800 dark:text-slate-200 font-bold truncate max-w-[200px]" title={metadata.containerStatusLabel}>
-                  {metadata.containerStatusLabel}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 dark:text-slate-500">EXIF HEADERS:</span>
-                <span className="text-slate-800 dark:text-slate-200 font-bold truncate max-w-[200px]" title={metadata.exifStatusLabel}>
-                  {metadata.exifStatusLabel}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 dark:text-slate-500">SOFTWARE SIGNATURE:</span>
-                <span className={metadata.softwareDetected ? 'font-bold text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200 font-bold'} title={metadata.softwareStatusLabel}>
-                  {metadata.softwareStatusLabel}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 dark:text-slate-500">ELA VARIANCE:</span>
-                <span className={ela.variance > 0.15 ? 'font-bold text-amber-600 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200 font-bold'}>
-                  {ela.supported ? `${Math.round(ela.variance * 100)}% HIGH VARIANCE` : 'SKIPPED (NON-JPEG)'}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400 dark:text-slate-500">FORENSIC NOTE:</span>
-                <span className="text-slate-700 dark:text-slate-300 font-medium truncate max-w-[200px]" title={ela.assessmentNote}>
-                  {ela.assessmentNote}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* SECTION D: DOCUMENT BOUNDARY & PERSPECTIVE */}
-        {layoutResult && (
-          <div className="p-4 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-2.5 text-xs font-mono">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
-              <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                <Scan className="w-3.5 h-3.5 text-orange-500" />
-                <span>SECTION D // BOUNDARY &amp; PERSPECTIVE AUDIT</span>
-              </div>
-              <Badge
-                variant={
-                  layoutResult.status === 'boundary-detected'
-                    ? 'success'
-                    : layoutResult.status === 'partial-boundary-detected'
-                    ? 'warning'
-                    : 'neutral'
-                }
-                size="sm"
-              >
-                {layoutResult.statusLabel.toUpperCase()} ({layoutResult.detectorScore}/100)
+              <Badge variant={riskAssessment.badgeVariant} size="sm">
+                LEVEL // {riskAssessment.level}
               </Badge>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px] pt-1">
-              <div className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200/60 dark:border-slate-800">
-                <span className="text-slate-400 dark:text-slate-500 uppercase font-mono text-[9px] block">PERIMETER &amp; GEOMETRY</span>
-                <span className="font-bold text-slate-900 dark:text-slate-100 block mt-0.5">
-                  {layoutResult.geometry ? `${layoutResult.geometry.averageWidth} × ${layoutResult.geometry.averageHeight} PX (${layoutResult.geometry.quadAspectRatio}:1)` : 'UNCERTAIN'}
+            {/* Risk Interpretation & Findings */}
+            <div className="md:col-span-8 space-y-3 font-sans">
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-1">
+                  EXAMINER RISK INTERPRETATION
                 </span>
-                <span className="text-slate-500 dark:text-slate-400 text-[10px] block mt-0.5">
-                  COVERAGE: {layoutResult.framing.areaCoveragePercent}% OF RASTER
-                </span>
+                <p className="text-sm font-medium text-slate-900 dark:text-slate-100 leading-snug">
+                  {riskAssessment.interpretation}
+                </p>
               </div>
 
-              <div className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200/60 dark:border-slate-800">
-                <span className="text-slate-400 dark:text-slate-500 uppercase font-mono text-[9px] block">PERSPECTIVE &amp; SKEW</span>
-                <span className="font-bold text-slate-900 dark:text-slate-100 block mt-0.5">
-                  {layoutResult.perspective ? `KEYSTONE: ${layoutResult.perspective.apparentKeystoneRatio} • TILT: ${layoutResult.perspective.rotationAngleDeg}°` : 'UNAVAILABLE'}
+              {/* Top Contributing Findings */}
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-1.5">
+                  CONTRIBUTING FORENSIC FINDINGS
                 </span>
-                <span className="text-slate-500 dark:text-slate-400 text-[10px] block mt-0.5">
-                  {layoutResult.perspective?.isSeverePerspective ? 'OFF-AXIS PERSPECTIVE' : 'NEAR-ORTHOGONAL'}
-                </span>
+                {assessment.contributingFindings.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {assessment.contributingFindings.map((f) => (
+                      <span
+                        key={f.id}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-mono font-medium border ${
+                          f.severity === 'medium'
+                            ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+                            : 'bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
+                        <span>{f.title}</span>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-emerald-700 dark:text-emerald-400 font-mono flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>All core image integrity heuristics are within normal baseline tolerances.</span>
+                  </p>
+                )}
               </div>
 
-              <div className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded border border-slate-200/60 dark:border-slate-800">
-                <span className="text-slate-400 dark:text-slate-500 uppercase font-mono text-[9px] block">LAYOUT CONTAINMENT</span>
-                <span className="font-bold text-slate-900 dark:text-slate-100 block mt-0.5">
-                  {layoutResult.layoutQuality.containmentRatio !== null
-                    ? `${layoutResult.layoutQuality.containmentFormatted} CONTAINED`
-                    : `CONTAINMENT: ${layoutResult.layoutQuality.containmentFormatted}`}
-                </span>
-                <span className="text-slate-500 dark:text-slate-400 text-[10px] block mt-0.5">
-                  {layoutResult.layoutQuality.totalTextRegions > 0
-                    ? `${layoutResult.layoutQuality.regionsInsideBoundary}/${layoutResult.layoutQuality.totalTextRegions} REGIONS INSIDE`
-                    : 'NO TEXT REGIONS'}
-                </span>
+              {/* Core Image Integrity Summary Row */}
+              <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+                <div>
+                  <span className="text-[9px] text-slate-400 block uppercase">CONTAINER</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{metadata.format}</span>
+                </div>
+                <div>
+                  <span className="text-[9px] text-slate-400 block uppercase">COMPRESSION</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    {ela.supported ? (ela.variance > 0.15 ? 'HIGH VARIANCE' : 'UNIFORM') : 'NON-JPEG'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[9px] text-slate-400 block uppercase">SHARPNESS</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    {quality.isPotentialBlur ? 'BLUR HAZARD' : 'SHARP'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[9px] text-slate-400 block uppercase">RESOLUTION</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    {quality.isLowResolution ? 'SUB-OPTIMAL' : 'ADEQUATE'}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
-        )}
+        </section>
 
-        
-        {/* SECTION: AI NEURAL DOCUMENT SCREENING (MobileNetV3-Small) */}
-        {mlResult && (
-          <div className="p-4 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-3 font-mono text-xs">
-            <div className="flex flex-wrap items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5 gap-2">
-              <div className="flex items-center gap-2 font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                <Cpu className="w-4 h-4 text-cyan-500 animate-pulse" />
-                <span>AI NEURAL DOCUMENT SCREENING // MobileNetV3-Small</span>
+        {/* ================================================================= */}
+        {/* SECTION 2 — AI DOCUMENT CLASSIFICATION                            */}
+        {/* ================================================================= */}
+        {mlResult ? (
+          <section className="p-5 rounded-xl bg-white dark:bg-slate-950 border border-slate-200/90 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 gap-2">
+              <div className="flex items-center gap-2">
+                <Cpu className="w-5 h-5 text-cyan-600 dark:text-cyan-400 animate-pulse" />
+                <h3 className="font-heading text-sm font-bold tracking-wider uppercase text-slate-900 dark:text-slate-100">
+                  SECTION 2 // AI DOCUMENT CLASSIFICATION
+                </h3>
               </div>
               <Badge
                 variant={
@@ -364,78 +485,85 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
                 }
                 size="sm"
               >
-                {mlResult.predictedClass === 'GENUINE' && '● GENUINE (NO TAMPERING DETECTED)'}
-                {mlResult.predictedClass === 'MANIPULATED' && '▲ MANIPULATED (FORGERY DETECTED)'}
-                {mlResult.predictedClass === 'NEEDS_REVIEW' && '◆ NEEDS REVIEW (AMBIGUOUS CONFIDENCE)'}
-                {mlResult.predictedClass === 'ERROR' && '✕ SCREENING ERROR / UNAVAILABLE'}
+                {mlResult.predictedClass === 'GENUINE' && '● GENUINE // TAMPER-FREE'}
+                {mlResult.predictedClass === 'MANIPULATED' && '▲ MANIPULATED // FORGERY DETECTED'}
+                {mlResult.predictedClass === 'NEEDS_REVIEW' && '◆ NEEDS REVIEW // AMBIGUOUS'}
+                {mlResult.predictedClass === 'ERROR' && '✕ SERVICE UNAVAILABLE'}
               </Badge>
             </div>
 
-            {/* Metrics Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-              <div className="p-2.5 rounded bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800">
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase block">CLASSIFICATION</span>
-                <strong
-                  className={
+            {/* Prominent Hero Status Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono">
+              <div className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 space-y-1">
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">
+                  AI CLASSIFICATION
+                </span>
+                <span
+                  className={`text-xl font-heading font-black block tracking-tight ${
                     mlResult.predictedClass === 'GENUINE'
-                      ? 'text-emerald-600 dark:text-emerald-400 font-bold text-sm'
+                      ? 'text-emerald-600 dark:text-emerald-400'
                       : mlResult.predictedClass === 'MANIPULATED'
-                      ? 'text-rose-600 dark:text-rose-400 font-bold text-sm'
-                      : mlResult.predictedClass === 'NEEDS_REVIEW'
-                      ? 'text-amber-600 dark:text-amber-400 font-bold text-sm'
-                      : 'text-slate-500 text-sm'
-                  }
+                      ? 'text-rose-600 dark:text-rose-400'
+                      : 'text-amber-600 dark:text-amber-400'
+                  }`}
                 >
                   {mlResult.predictedClass}
-                </strong>
+                </span>
               </div>
 
-              <div className="p-2.5 rounded bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800">
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase block">P(GENUINE)</span>
-                <strong className="text-slate-800 dark:text-slate-200 font-bold text-sm">
+              <div className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 space-y-1">
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">
+                  P(GENUINE)
+                </span>
+                <span className="text-xl font-heading font-bold text-slate-900 dark:text-slate-100 block">
                   {(mlResult.genuineProbability * 100).toFixed(1)}%
-                </strong>
+                </span>
               </div>
 
-              <div className="p-2.5 rounded bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800">
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase block">P(MANIPULATED)</span>
-                <strong
-                  className={
+              <div className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 space-y-1">
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">
+                  P(MANIPULATED)
+                </span>
+                <span
+                  className={`text-xl font-heading font-bold block ${
                     mlResult.manipulatedProbability > 0.5
-                      ? 'text-rose-600 dark:text-rose-400 font-bold text-sm'
-                      : 'text-slate-800 dark:text-slate-200 font-bold text-sm'
-                  }
+                      ? 'text-rose-600 dark:text-rose-400'
+                      : 'text-slate-900 dark:text-slate-100'
+                  }`}
                 >
                   {(mlResult.manipulatedProbability * 100).toFixed(1)}%
-                </strong>
+                </span>
               </div>
 
-              <div className="p-2.5 rounded bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800">
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase block">PROCESSING TIME</span>
-                <strong
-                  className="text-slate-800 dark:text-slate-200 font-bold text-sm truncate block"
-                  title={`${mlResult.processingTimeMs.toFixed(1)}ms on ${mlResult.device}`}
-                >
-                  {mlResult.processingTimeMs.toFixed(1)}ms{' '}
-                  <span className="text-[10px] text-slate-400 font-normal">({mlResult.device})</span>
-                </strong>
+              <div className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 space-y-1">
+                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">
+                  INFERENCE LATENCY
+                </span>
+                <span className="text-xl font-heading font-bold text-slate-900 dark:text-slate-100 block">
+                  {mlResult.processingTimeMs.toFixed(1)} ms
+                </span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal block truncate">
+                  Device: {mlResult.device}
+                </span>
               </div>
             </div>
 
-            {/* Probability Progress Bar */}
-            <div className="space-y-1.5 pt-1">
-              <div className="flex justify-between text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                <span className="text-emerald-700 dark:text-emerald-400">
-                  GENUINE: {(mlResult.genuineProbability * 100).toFixed(1)}%
+            {/* Probability Distribution Bar */}
+            <div className="space-y-1.5 font-mono">
+              <div className="flex justify-between text-xs font-semibold">
+                <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <span>GENUINE</span>
+                  <span>{(mlResult.genuineProbability * 100).toFixed(1)}%</span>
                 </span>
-                <span className="text-[9px] uppercase tracking-wider text-slate-400">
-                  CONFIDENCE: {(mlResult.confidence * 100).toFixed(1)}% (THRESHOLD: 50%)
+                <span className="text-[10px] text-slate-400 font-normal uppercase tracking-wider">
+                  DECISION THRESHOLD: 50% (REVIEW BAND: 40%–60%)
                 </span>
-                <span className="text-rose-700 dark:text-rose-400">
-                  MANIPULATED: {(mlResult.manipulatedProbability * 100).toFixed(1)}%
+                <span className="text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                  <span>MANIPULATED</span>
+                  <span>{(mlResult.manipulatedProbability * 100).toFixed(1)}%</span>
                 </span>
               </div>
-              <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden flex border border-slate-200 dark:border-slate-800 relative">
+              <div className="w-full h-3 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden flex relative border border-slate-300 dark:border-slate-700">
                 <div
                   className="bg-emerald-500 transition-all duration-500"
                   style={{ width: `${Math.round(mlResult.genuineProbability * 100)}%` }}
@@ -448,207 +576,378 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
               </div>
             </div>
 
-            {/* Mandatory Governance Disclaimer */}
-            <div className="p-2.5 rounded bg-cyan-500/5 dark:bg-cyan-500/10 border border-cyan-500/20 text-[11px] font-sans text-cyan-900 dark:text-cyan-200 space-y-1">
-              <div className="flex items-start gap-1.5 font-semibold">
-                <AlertTriangle className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400 shrink-0 mt-0.5" />
-                <span>AI screening is an experimental assessment of visual document manipulation. It does not establish official document authenticity.</span>
+            {/* Mandatory Governance & Experimental Scope Notice */}
+            <div className="p-3.5 rounded-lg bg-cyan-500/5 dark:bg-cyan-500/10 border border-cyan-500/20 text-xs font-sans text-cyan-900 dark:text-cyan-200 space-y-1.5">
+              <div className="flex items-start gap-2 font-bold font-mono text-[11px] uppercase tracking-wide">
+                <AlertTriangle className="w-4 h-4 text-cyan-600 dark:text-cyan-400 shrink-0 mt-0.5" />
+                <span>AI SCREENING DISCLAIMER &amp; LIMITATIONS // MobileNetV3-Small</span>
               </div>
-              <div className="text-[10px] text-slate-600 dark:text-slate-400 pl-5 space-y-0.5">
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed pl-6">
+                {mlResult.screeningDisclaimer}
+              </p>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 pl-6 space-y-0.5 font-sans">
                 <p>
-                  <strong>Model Limitations:</strong> High sensitivity to photo swaps (100% test recall) and shadow anomalies (100% test recall). Low sensitivity to micro text alterations and localized copy-move cloning (0% test recall).
-                </p>
-                <p>
-                  <strong>Independent Evidence:</strong> AI screening operates as a preliminary corroborating signal and does not override statutory issuer verification, deterministic checksums, or OCR analysis.
+                  <strong>Model Sensitivity Scope:</strong> High sensitivity to photo swaps (100% test recall) and shadow anomalies (100% test recall). Low sensitivity to micro text alterations and localized copy-move cloning (0% test recall).
                 </p>
               </div>
             </div>
-          </div>
+          </section>
+        ) : (
+          <section className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-500 dark:text-slate-400 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Cpu className="w-4 h-4 text-slate-400" />
+              <span>AI Neural Tampering Screening: Service offline or not invoked for this specimen.</span>
+            </div>
+            <span className="text-[10px] uppercase font-bold text-slate-400">HEURISTICS ONLY</span>
+          </section>
         )}
 
-
-        {/* SECTION E: PRELIMINARY ASSESSMENT & FINDINGS */}
-        <div className="p-4 rounded-lg bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 space-y-3 font-mono">
-          <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800 pb-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-              {layoutResult ? 'SECTION E // PRELIMINARY ASSESSMENT' : 'SECTION D // PRELIMINARY ASSESSMENT'}
+        {/* ================================================================= */}
+        {/* SECTION 3 — DOCUMENT FORENSIC ANALYSIS                            */}
+        {/* ================================================================= */}
+        <section className="space-y-3 font-mono">
+          <div className="flex items-center justify-between pb-1 border-b border-slate-200/70 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <Sliders className="w-4 h-4 text-orange-500" />
+              <h3 className="font-heading text-sm font-bold tracking-wider uppercase text-slate-900 dark:text-slate-100">
+                SECTION 3 // DOCUMENT FORENSIC ANALYSIS
+              </h3>
+            </div>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+              MULTI-DIMENSIONAL EVIDENCE CARDS
             </span>
-            <Badge
-              variant={
-                assessment.priority === 'manual-review'
-                  ? 'warning'
-                  : assessment.priority === 'inconclusive'
-                  ? 'neutral'
-                  : 'success'
-              }
-              size="sm"
-            >
-              PRIORITY: {assessment.priorityLabel.toUpperCase()}
-            </Badge>
           </div>
 
-          <div className="space-y-1 text-xs">
-            <p className="font-bold text-slate-900 dark:text-slate-100 font-heading">{assessment.summary}</p>
-            <p className="text-[11px] text-slate-600 dark:text-slate-400 font-sans">
-              <strong>RECOMMENDED ACTION:</strong> {assessment.recommendedAction}
-            </p>
-          </div>
-
-          <div className="pt-1">
-            <span className="text-[9px] uppercase tracking-wider text-slate-400 dark:text-slate-500 block mb-1">
-              CONTRIBUTING FINDINGS ({assessment.contributingFindings.length})
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {assessment.contributingFindings.map((f) => (
-                <span
-                  key={f.id}
-                  className="px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[10px] text-slate-700 dark:text-slate-300 font-semibold"
-                >
-                  {f.title}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+            {/* Card 1: OCR Surface Extraction */}
+            <div className="p-3.5 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-1.5">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-purple-500" />
+                  <span>OCR EXTRACTION</span>
                 </span>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* SECTION F: IDENTIFIER VALIDATION & VERIFICATION BREAKDOWN */}
-        {workflowDossier && (
-          <div className="p-4 rounded-lg bg-slate-50/80 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800 space-y-3 font-mono">
-            <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800 pb-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
-                SECTION F // IDENTIFIER VALIDATION &amp; SCOPE BREAKDOWN
-              </span>
-              <Badge variant="neutral" size="sm">
-                STEP 1 // BASELINE
-              </Badge>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400">
-                <span>TARGET DOCUMENT CATEGORY:</span>
-                <strong className="text-slate-900 dark:text-slate-100">{workflowDossier.selectedDocumentType}</strong>
-              </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400">
-                <span>DETERMINISTIC IDENTIFIER CHECKS:</span>
-                <span className="text-amber-600 dark:text-amber-400 font-bold">
-                  {workflowDossier.verificationSummary.unimplementedChecks} NOT IMPLEMENTED (STEP 2 SCHEDULED)
+                <span className="font-bold text-slate-700 dark:text-slate-300">
+                  {ocrStatus === 'success' ? `${ocrResult?.confidence ?? 'N/A'}% QUAL` : ocrStatus.toUpperCase()}
                 </span>
               </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400">
-                <span>ISSUER REGISTRY VERIFICATION:</span>
-                <span className="text-slate-500 font-bold">UNAVAILABLE (NO LIVE GATEWAY)</span>
+              <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                {detectedDocTypeField?.value || selectedDocumentType}
               </div>
+              <p className="text-[11px] font-sans text-slate-500 dark:text-slate-400">
+                {ocrResult?.candidateFields.length ?? 0} candidate fields parsed via client-side WebAssembly.
+              </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800 text-[10px] font-sans">
-              <div className="p-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-                <strong className="text-emerald-700 dark:text-emerald-400 font-mono uppercase block">
-                  ✓ WHAT THE SYSTEM VERIFIED:
-                </strong>
-                <ul className="list-disc list-inside text-slate-600 dark:text-slate-300 space-y-0.5">
-                  <li>Client-side OCR transcription &amp; candidate field detection</li>
-                  <li>Image exposure, contrast, and Laplacian blur score</li>
-                  <li>Metadata container (EXIF/JFIF/software markers)</li>
-                  <li>JPEG Error Level Analysis compression artifacts</li>
-                  <li>Document perimeter localization &amp; layout containment</li>
-                </ul>
+            {/* Card 2: Image Dimensions & Quality */}
+            <div className="p-3.5 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-1.5">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                  <Sliders className="w-3.5 h-3.5 text-orange-500" />
+                  <span>DIMENSIONS &amp; ASPECT</span>
+                </span>
+                <span className={quality.isLowResolution ? 'font-bold text-amber-600' : 'text-slate-600 dark:text-slate-400'}>
+                  {quality.isLowResolution ? 'SUB-OPTIMAL' : 'ADEQUATE'}
+                </span>
               </div>
+              <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                {quality.width} × {quality.height} PX
+              </div>
+              <p className="text-[11px] font-sans text-slate-500 dark:text-slate-400">
+                Aspect ratio: {quality.aspectRatio} ({quality.aspectRatioLabel})
+              </p>
+            </div>
 
-              <div className="p-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
-                <strong className="text-amber-700 dark:text-amber-400 font-mono uppercase block">
-                  ✗ WHAT THE SYSTEM DID NOT VERIFY:
-                </strong>
-                <ul className="list-disc list-inside text-slate-600 dark:text-slate-300 space-y-0.5">
-                  <li>Deterministic mathematical checksums or format pattern validity (Step 2)</li>
-                  <li>Official issuer authority database registration or active status</li>
-                  <li>Biometric matching to genuine credential holder</li>
-                  <li>Physical security thread, microprinting, or holographic features</li>
-                  <li>Notice: Expired credentials indicate lapsed validity, NOT forgery or tampering</li>
-                </ul>
+            {/* Card 3: Exposure & Photometric Contrast */}
+            <div className="p-3.5 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-1.5">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-500" />
+                  <span>EXPOSURE &amp; CONTRAST</span>
+                </span>
+                <span className={quality.isExtremeLuminance ? 'font-bold text-amber-600' : 'text-slate-600 dark:text-slate-400'}>
+                  {quality.isExtremeLuminance ? 'EXTREME' : 'BALANCED'}
+                </span>
               </div>
+              <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                {quality.meanLuminance} / 255 LMN
+              </div>
+              <p className="text-[11px] font-sans text-slate-500 dark:text-slate-400">
+                RMS contrast std dev: {quality.contrastStdDev} ({quality.isLowContrast ? 'Compressed' : 'Optimal dynamic range'})
+              </p>
+            </div>
+
+            {/* Card 4: EXIF Metadata & Software Headers */}
+            <div className="p-3.5 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-1.5">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>CONTAINER &amp; EXIF</span>
+                </span>
+                <span className={metadata.softwareDetected ? 'font-bold text-amber-600' : 'text-emerald-600'}>
+                  {metadata.softwareDetected ? 'EDIT MARKER' : 'CLEAN'}
+                </span>
+              </div>
+              <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                {metadata.format} CONTAINER
+              </div>
+              <p className="text-[11px] font-sans text-slate-500 dark:text-slate-400 truncate" title={metadata.softwareStatusLabel}>
+                {metadata.softwareDetected ? metadata.softwareStatusLabel : 'No third-party image manipulation software tags detected.'}
+              </p>
+            </div>
+
+            {/* Card 5: Error Level Analysis (ELA) */}
+            <div className="p-3.5 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-1.5">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-amber-500" />
+                  <span>COMPRESSION (ELA)</span>
+                </span>
+                <span className={ela.variance > 0.15 ? 'font-bold text-amber-600' : 'text-emerald-600'}>
+                  {ela.supported ? (ela.variance > 0.15 ? 'VARIANCE ANOMALY' : 'UNIFORM') : 'SKIPPED'}
+                </span>
+              </div>
+              <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                {ela.supported ? `${Math.round(ela.variance * 100)}% ERROR VARIANCE` : 'NON-JPEG SPECIMEN'}
+              </div>
+              <p className="text-[11px] font-sans text-slate-500 dark:text-slate-400 truncate" title={ela.assessmentNote}>
+                {ela.assessmentNote}
+              </p>
+            </div>
+
+            {/* Card 6: Laplacian Sharpness & Blur */}
+            <div className="p-3.5 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-1.5">
+              <div className="flex items-center justify-between text-slate-400">
+                <span className="text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                  <Scan className="w-3.5 h-3.5 text-blue-500" />
+                  <span>LAPLACIAN SHARPNESS</span>
+                </span>
+                <span className={quality.isPotentialBlur ? 'font-bold text-amber-600' : 'text-emerald-600'}>
+                  {quality.isPotentialBlur ? 'BLUR WARNING' : 'SHARP'}
+                </span>
+              </div>
+              <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                SCORE // {quality.blurScore}
+              </div>
+              <p className="text-[11px] font-sans text-slate-500 dark:text-slate-400">
+                {quality.isPotentialBlur ? 'Soft raster edges observed. Inspect for synthetic resampling.' : 'Sharp edge gradients consistent with standard capture.'}
+              </p>
+            </div>
+
+            {/* Card 7: Boundary & Layout (if executed) */}
+            {layoutResult && (
+              <div className="p-3.5 rounded-lg bg-white dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 space-y-1.5 sm:col-span-2 md:col-span-3">
+                <div className="flex items-center justify-between text-slate-400">
+                  <span className="text-[10px] uppercase font-bold tracking-wider flex items-center gap-1.5">
+                    <Scan className="w-3.5 h-3.5 text-orange-500" />
+                    <span>BOUNDARY, PERSPECTIVE &amp; LAYOUT CONTAINMENT</span>
+                  </span>
+                  <Badge variant={layoutResult.status === 'boundary-detected' ? 'success' : 'warning'} size="sm">
+                    {layoutResult.statusLabel.toUpperCase()} ({layoutResult.detectorScore}/100)
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs pt-1">
+                  <div>
+                    <span className="text-[9px] text-slate-400 uppercase block">GEOMETRY</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200">
+                      {layoutResult.geometry ? `${layoutResult.geometry.averageWidth} × ${layoutResult.geometry.averageHeight} px` : 'Perimeter Uncertain'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-slate-400 uppercase block">PERSPECTIVE / TILT</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200">
+                      {layoutResult.perspective ? `${layoutResult.perspective.rotationAngleDeg}° tilt • Keystone: ${layoutResult.perspective.apparentKeystoneRatio}` : 'Near-orthogonal'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-slate-400 uppercase block">TEXT CONTAINMENT</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200">
+                      {layoutResult.layoutQuality.containmentFormatted} contained
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* ================================================================= */}
+        {/* SECTION 4 — VERIFICATION SUMMARY                                  */}
+        {/* ================================================================= */}
+        <section className="p-5 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200/90 dark:border-slate-800 shadow-sm space-y-4 font-mono">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-200/70 dark:border-slate-800 gap-2">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              <h3 className="font-heading text-sm font-bold tracking-wider uppercase text-slate-900 dark:text-slate-100">
+                SECTION 4 // VERIFICATION SUMMARY (EXECUTED CHECKS ONLY)
+              </h3>
+            </div>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+              {executedChecks.length} CHECKS EXECUTED
+            </span>
+          </div>
+
+          {/* Tri-Status Summary Counters */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="p-3.5 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-emerald-800 dark:text-emerald-300 uppercase tracking-wider block font-bold">
+                  PASSED CHECKS
+                </span>
+                <span className="text-2xl font-heading font-black text-emerald-900 dark:text-emerald-100 block">
+                  {passedChecks.length}
+                </span>
+              </div>
+              <CheckCircle2 className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+            </div>
+
+            <div className="p-3.5 rounded-lg bg-rose-50/80 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-800 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-rose-800 dark:text-rose-300 uppercase tracking-wider block font-bold">
+                  FAILED CHECKS
+                </span>
+                <span className="text-2xl font-heading font-black text-rose-900 dark:text-rose-100 block">
+                  {failedChecks.length}
+                </span>
+              </div>
+              <XCircle className="w-6 h-6 text-rose-600 dark:text-rose-400" />
+            </div>
+
+            <div className="p-3.5 rounded-lg bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-amber-800 dark:text-amber-300 uppercase tracking-wider block font-bold">
+                  NEEDS REVIEW
+                </span>
+                <span className="text-2xl font-heading font-black text-amber-900 dark:text-amber-100 block">
+                  {reviewChecks.length}
+                </span>
+              </div>
+              <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
             </div>
           </div>
-        )}
 
-        {/* SECTION G: LIMITATIONS */}
-        <div className="p-4 bg-amber-500/10 dark:bg-amber-950/30 rounded-lg border border-amber-500/30 text-[11px] font-mono text-amber-950 dark:text-amber-200 space-y-2">
-          <div className="flex items-center gap-2 font-bold text-xs uppercase tracking-wider text-amber-900 dark:text-amber-300">
-            <ShieldAlert className="w-4 h-4 text-amber-500 flex-shrink-0" />
-            <span>INSTITUTIONAL LIMITATIONS &amp; EVALUATION BOUNDARIES</span>
+          {/* Clean Executed Checks List */}
+          <div className="divide-y divide-slate-200/70 dark:divide-slate-800 text-xs">
+            {executedChecks.map((check) => (
+              <div key={check.id} className="py-2.5 flex items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-800 dark:text-slate-200">
+                      {check.name}
+                    </span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-200/60 dark:bg-slate-800 text-slate-500">
+                      {check.category}
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-sans text-slate-500 dark:text-slate-400">
+                    {check.detail}
+                  </p>
+                </div>
+                <div>
+                  {check.status === 'PASS' && (
+                    <Badge variant="success" size="sm">
+                      PASS
+                    </Badge>
+                  )}
+                  {check.status === 'FAIL' && (
+                    <Badge variant="danger" size="sm">
+                      FAIL
+                    </Badge>
+                  )}
+                  {check.status === 'NEEDS_REVIEW' && (
+                    <Badge variant="warning" size="sm">
+                      REVIEW
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
-          <ul className="list-disc list-inside space-y-1 leading-relaxed font-sans text-amber-900/90 dark:text-amber-200/90 text-xs">
-            <li>
-              <strong>No Authenticity Verdict:</strong> FALCON screening does NOT certify this document as authentic or genuine.
-            </li>
-            <li>
-              <strong>No Definite Fraud Classification:</strong> Quality flags represent inspection cues; they do not establish fraud.
-            </li>
-            <li>
-              <strong>Credential Expiry Is Separate from Fraud:</strong> An expired document indicates lapsed administrative validity; it does NOT constitute evidence of forgery or tampering.
-            </li>
-            <li>
-              <strong>No External Registry Query:</strong> Candidate identifiers are parsed locally and not queried against government databases.
-            </li>
-          </ul>
-        </div>
 
-        {/* SECTION H: PRIVACY CONTROLS & EXPORT */}
-        <div className="pt-3 border-t border-slate-200/80 dark:border-slate-800 space-y-3 font-mono">
-          <div className="p-3 bg-slate-50/80 dark:bg-slate-950/60 rounded-lg border border-slate-200/80 dark:border-slate-800 space-y-2">
+          <div className="p-2.5 rounded bg-slate-100/70 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800 text-[10px] text-slate-500 dark:text-slate-400 font-sans">
+            <strong>Audit Transparency Note:</strong> Only implemented automated heuristics and neural checks are listed above. Unimplemented format algorithms, mathematical checksums, and statutory issuer database lookups are not evaluated in this release.
+          </div>
+        </section>
+
+        {/* ================================================================= */}
+        {/* SECTION 5 — AUDIT REPORT & EXPORT                                 */}
+        {/* ================================================================= */}
+        <section className="pt-3 border-t border-slate-200/80 dark:border-slate-800 space-y-4 font-mono">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1">
+            <div className="flex items-center gap-2">
+              <Archive className="w-4 h-4 text-orange-500" />
+              <h3 className="font-heading text-sm font-bold tracking-wider uppercase text-slate-900 dark:text-slate-100">
+                SECTION 5 // AUDIT REPORT &amp; EXPORT
+              </h3>
+            </div>
+            <div className="text-[11px] text-slate-400 dark:text-slate-500">
+              Ref: <strong className="text-slate-700 dark:text-slate-300">{reportId}</strong> • Station: {stationId}
+            </div>
+          </div>
+
+          {/* Privacy Controls Panel */}
+          <div className="p-3.5 bg-slate-50 dark:bg-slate-950/60 rounded-xl border border-slate-200/80 dark:border-slate-800 space-y-2.5">
             <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
               <Lock className="w-3.5 h-3.5 text-orange-500" />
               <span>EXPORT PRIVACY CONTROLS (DEFAULT: MASKED &amp; REDACTED)</span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-sans">
-              <label className="flex items-start gap-2 text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-sans">
+              <label className="flex items-start gap-2.5 text-slate-700 dark:text-slate-300 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={includeIdentifiableFields}
                   onChange={(e) => setIncludeIdentifiableFields(e.target.checked)}
-                  className="w-3.5 h-3.5 mt-0.5 rounded border-slate-300 dark:border-slate-700 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                  className="w-4 h-4 mt-0.5 rounded border-slate-300 dark:border-slate-700 text-orange-600 focus:ring-orange-500 cursor-pointer"
                 />
                 <span className="leading-tight">
-                  <strong className="block text-slate-900 dark:text-slate-100 font-medium">Unmask candidate identity fields</strong>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400">Includes names, IDs, dates of birth (masked by default)</span>
+                  <strong className="block text-slate-900 dark:text-slate-100 font-medium">
+                    Unmask candidate identity fields
+                  </strong>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Includes names, IDs, dates of birth (masked by default)
+                  </span>
                 </span>
               </label>
 
-              <label className="flex items-start gap-2 text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+              <label className="flex items-start gap-2.5 text-slate-700 dark:text-slate-300 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={includeFullOCR}
                   onChange={(e) => setIncludeFullOCR(e.target.checked)}
-                  className="w-3.5 h-3.5 mt-0.5 rounded border-slate-300 dark:border-slate-700 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                  className="w-4 h-4 mt-0.5 rounded border-slate-300 dark:border-slate-700 text-orange-600 focus:ring-orange-500 cursor-pointer"
                 />
                 <span className="leading-tight">
-                  <strong className="block text-slate-900 dark:text-slate-100 font-medium">Include raw OCR text buffer</strong>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400">Includes unparsed character dump (redacted by default)</span>
+                  <strong className="block text-slate-900 dark:text-slate-100 font-medium">
+                    Include raw OCR text buffer
+                  </strong>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Includes unparsed character dump (redacted by default)
+                  </span>
                 </span>
               </label>
             </div>
 
-            {/* Explicit PII Export Warning */}
+            {/* PII Unmasking Alert */}
             {includeIdentifiableFields && (
               <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-md text-[11px] font-sans text-amber-900 dark:text-amber-200 flex items-start gap-2 animate-in fade-in">
                 <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                 <div>
                   <strong className="font-bold block font-mono uppercase text-amber-950 dark:text-amber-100">
-                    EXPLICIT PII UNMASKING WARNING
+                    PII UNMASKING ACTIVE
                   </strong>
                   <span>
-                    You have enabled unmasking of personal identity fields. Downloaded dossier files will contain unmasked personal names, full identifier sequences, and dates of birth. Ensure strict compliance with personal data protection regulations prior to export or distribution.
+                    Downloaded reports will contain unmasked identity attributes. Ensure adherence to data protection standards.
                   </span>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Save to Ledger / Export Row */}
+          {/* Action Buttons Row */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
             <div className="flex flex-col gap-1">
               <span className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-mono">
-                PRIVACY GUARANTEE: BITMAPS EXCLUDED • 100% IN-BROWSER
+                PRIVACY: BITMAPS EXCLUDED • 100% IN-BROWSER
               </span>
               {(saveFeedback || downloadSuccess || autoSaveStatus === 'saved' || autoSaveError) && (
                 <div className="flex items-center gap-1.5 text-xs font-mono font-bold animate-in fade-in">
@@ -663,9 +962,7 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
                       <span className="text-emerald-600 dark:text-emerald-400">
                         {saveFeedback ||
                           downloadSuccess ||
-                          (autoSaveStatus === 'saved'
-                            ? `Screening completed and case saved locally. (Ref: ${reportId})`
-                            : '')}
+                          (autoSaveStatus === 'saved' ? `Saved locally in audit ledger. (Ref: ${reportId})` : '')}
                       </span>
                     </>
                   )}
@@ -684,7 +981,7 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
                   autoSaveStatus === 'saving'
                 }
                 onClick={autoSaveStatus === 'error' && onRetryAutoSave ? onRetryAutoSave : handleSaveToLedger}
-                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
                   isAlreadyArchived
                     ? 'bg-emerald-500/10 dark:bg-emerald-950/40 border border-emerald-500/40 text-emerald-600 dark:text-emerald-400 cursor-default'
                     : savingState === 'saving' || autoSaveStatus === 'saving'
@@ -695,17 +992,12 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
                     ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 border border-slate-200 dark:border-slate-700 cursor-not-allowed'
                     : 'bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 border border-slate-900 dark:border-slate-100 shadow-2xs'
                 }`}
-                title={
-                  isAlreadyArchived
-                    ? 'This screening dossier is already saved in your browser IndexedDB ledger'
-                    : 'Save screening metrics and masked candidate fields to client IndexedDB'
-                }
               >
                 {isAlreadyArchived ? (
                   <>
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                     <span>
-                      {autoSaveStatus === 'saved' ? 'AUTO-SAVED TO AUDIT LEDGER' : 'SAVED TO AUDIT LEDGER'}
+                      {autoSaveStatus === 'saved' ? 'AUTO-SAVED IN AUDIT LEDGER' : 'SAVED IN AUDIT LEDGER'}
                     </span>
                   </>
                 ) : savingState === 'saving' || autoSaveStatus === 'saving' ? (
@@ -713,7 +1005,7 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
                 ) : autoSaveStatus === 'error' ? (
                   <>
                     <AlertTriangle className="w-3.5 h-3.5 text-white" />
-                    <span>RETRY SAVE TO LEDGER</span>
+                    <span>RETRY SAVE</span>
                   </>
                 ) : (
                   <>
@@ -723,6 +1015,7 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
                 )}
               </button>
 
+              {/* Text Dossier Export */}
               <button
                 type="button"
                 disabled={disabled}
@@ -737,6 +1030,7 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
                 <span>TEXT DOSSIER</span>
               </button>
 
+              {/* JSON Report Export */}
               <button
                 type="button"
                 disabled={disabled}
@@ -755,9 +1049,9 @@ export const ScreeningReportSection: React.FC<ScreeningReportSectionProps> = ({
 
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between text-[10px] font-mono text-slate-400 dark:text-slate-500 gap-1 uppercase tracking-wider">
             <span>{PROJECT_BRANDING.developerAttribution} // FALCON-404</span>
-            <span>INSTITUTIONAL SCREENING DOSSIER</span>
+            <span>FORENSIC SCREENING DOSSIER</span>
           </div>
-        </div>
+        </section>
       </div>
     </Card>
   )

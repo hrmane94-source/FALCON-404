@@ -14,7 +14,8 @@ import {
   handleApiScreenings,
   handleApiMlHealth,
   handleApiMlPredict,
-  sendError
+  sendError,
+  resolveCorsOrigin
 } from './api.ts'
 
 const PORT = parseInt(process.env.PORT || '4040', 10)
@@ -22,13 +23,15 @@ const PORT = parseInt(process.env.PORT || '4040', 10)
 export const router = async (req: IncomingMessage, res: ServerResponse) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`)
   const method = req.method?.toUpperCase() || 'GET'
+  const allowedOrigin = resolveCorsOrigin(req)
 
   // Handle CORS preflight
   if (method === 'OPTIONS') {
     res.writeHead(204, {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': allowedOrigin,
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With'
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+      'Vary': 'Origin'
     })
     res.end()
     return
@@ -56,7 +59,7 @@ export const router = async (req: IncomingMessage, res: ServerResponse) => {
   }
 
   // Route not found
-  sendError(res, 404, 'NOT_FOUND', `Route ${method} ${url.pathname} was not found on this server.`)
+  sendError(res, 404, 'NOT_FOUND', `Route ${method} ${url.pathname} was not found on this server.`, req)
 }
 
 // Start HTTP server if executed directly

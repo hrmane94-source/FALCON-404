@@ -440,15 +440,21 @@ describe('FALCON-404 :: Backend API Contract', () => {
   })
 
   test('GET /api/v1/ml/health gracefully reports 503 when Python ML service is offline', async () => {
-    const req = {} as any
-    const res = new MockResponse()
-    await handleApiMlHealth(req, res as any)
+    const origUrl = process.env.ML_SERVICE_URL
+    process.env.ML_SERVICE_URL = 'http://127.0.0.1:59999'
+    try {
+      const req = {} as any
+      const res = new MockResponse()
+      await handleApiMlHealth(req, res as any)
 
-    // ML service is offline during standard unit tests
-    assert.strictEqual(res.statusCode, 503)
-    const json = JSON.parse(res.body)
-    assert.strictEqual(json.error.code, 'ML_SERVICE_UNAVAILABLE')
-    assert.ok(json.error.message.includes('ML inference service'))
+      // ML service is offline on port 59999
+      assert.strictEqual(res.statusCode, 503)
+      const json = JSON.parse(res.body)
+      assert.strictEqual(json.error.code, 'ML_SERVICE_UNAVAILABLE')
+      assert.ok(json.error.message.includes('ML inference service'))
+    } finally {
+      process.env.ML_SERVICE_URL = origUrl
+    }
   })
 
   test('POST /api/v1/ml/predict rejects empty upload payload with 400', async () => {
@@ -465,16 +471,22 @@ describe('FALCON-404 :: Backend API Contract', () => {
   })
 
   test('POST /api/v1/ml/predict gracefully reports 503 when Python ML service is offline', async () => {
-    const req = (async function* () {
-      yield Buffer.from('fake image binary content for testing')
-    })() as any
-    req.headers = { 'content-type': 'image/jpeg' }
+    const origUrl = process.env.ML_SERVICE_URL
+    process.env.ML_SERVICE_URL = 'http://127.0.0.1:59999'
+    try {
+      const req = (async function* () {
+        yield Buffer.from('fake image binary content for testing')
+      })() as any
+      req.headers = { 'content-type': 'image/jpeg' }
 
-    const res = new MockResponse()
-    await handleApiMlPredict(req, res as any)
+      const res = new MockResponse()
+      await handleApiMlPredict(req, res as any)
 
-    assert.strictEqual(res.statusCode, 503)
-    const json = JSON.parse(res.body)
-    assert.strictEqual(json.error.code, 'ML_SERVICE_UNAVAILABLE')
+      assert.strictEqual(res.statusCode, 503)
+      const json = JSON.parse(res.body)
+      assert.strictEqual(json.error.code, 'ML_SERVICE_UNAVAILABLE')
+    } finally {
+      process.env.ML_SERVICE_URL = origUrl
+    }
   })
 })

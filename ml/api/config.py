@@ -52,7 +52,7 @@ class Settings:
     # CORS Origins (Restricted to Node server and React frontend by default)
     CORS_ORIGINS_RAW: str = os.getenv(
         "ML_CORS_ORIGINS",
-        "http://localhost:5173,http://localhost:4040,http://127.0.0.1:5173,http://127.0.0.1:4040"
+        "https://falcon-404.vercel.app,http://localhost:5173,http://localhost:4040,http://127.0.0.1:5173,http://127.0.0.1:4040"
     )
 
     @property
